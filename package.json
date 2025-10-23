@@ -1,5 +1,5 @@
 {
-  "name": "taskly",
+  "name": "@codemastersolutions/taskly",
   "version": "1.0.0",
   "description": "Zero-dependency TypeScript library for parallel command execution",
   "keywords": [
@@ -13,12 +13,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/taskly.git"
+    "url": "https://github.com/codemastersolutions/taskly.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/taskly/issues"
+    "url": "https://github.com/codemastersolutions/taskly/issues"
   },
-  "homepage": "https://github.com/yourusername/taskly#readme",
+  "homepage": "https://github.com/codemastersolutions/taskly#readme",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
   "types": "./dist/types/index.d.ts",
