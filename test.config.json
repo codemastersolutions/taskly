@@ -1,0 +1,87 @@
+{
+  "continuous": {
+    "enabled": true,
+    "schedule": "0 */6 * * *",
+    "modes": ["ci", "coverage"],
+    "notifications": {
+      "onFailure": true,
+      "onSuccess": false,
+      "channels": ["github-issues"]
+    }
+  },
+  "coverage": {
+    "thresholds": {
+      "global": {
+        "statements": 90,
+        "branches": 90,
+        "functions": 90,
+        "lines": 90
+      },
+      "perFile": {
+        "statements": 85,
+        "branches": 85,
+        "functions": 85,
+        "lines": 85
+      }
+    },
+    "watermarks": {
+      "statements": [80, 90],
+      "functions": [80, 90],
+      "branches": [80, 90],
+      "lines": [80, 90]
+    },
+    "failOnThreshold": true,
+    "reportFormats": ["text", "json", "html", "lcov", "cobertura"]
+  },
+  "testing": {
+    "timeout": {
+      "test": 10000,
+      "hook": 10000,
+      "teardown": 5000
+    },
+    "retry": {
+      "ci": 1,
+      "local": 0
+    },
+    "parallel": {
+      "enabled": true,
+      "maxWorkers": 4,
+      "singleThread": false
+    },
+    "watch": {
+      "enabled": true,
+      "excludePaths": ["node_modules", "dist", "coverage"]
+    }
+  },
+  "reporting": {
+    "formats": ["verbose", "json", "html", "junit"],
+    "outputDir": "./coverage",
+    "generateBadges": true,
+    "uploadArtifacts": true,
+    "retentionDays": 30
+  },
+  "quality": {
+    "preCommit": {
+      "runTests": true,
+      "checkCoverage": true,
+      "failFast": true
+    },
+    "pullRequest": {
+      "commentCoverage": true,
+      "requireTests": true,
+      "blockOnFailure": true
+    }
+  },
+  "monitoring": {
+    "healthCheck": {
+      "enabled": true,
+      "schedule": "0 8 * * 1",
+      "metrics": ["testCount", "coverage", "performance", "bundleSize"]
+    },
+    "alerts": {
+      "coverageDropThreshold": 5,
+      "testFailureThreshold": 1,
+      "performanceDegradationThreshold": 20
+    }
+  }
+}

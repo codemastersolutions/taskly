@@ -1,0 +1,118 @@
+{
+  "name": "taskly",
+  "version": "1.0.0",
+  "description": "Zero-dependency TypeScript library for parallel command execution",
+  "keywords": [
+    "parallel",
+    "commands",
+    "cli",
+    "typescript",
+    "zero-dependencies"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/taskly.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/taskly/issues"
+  },
+  "homepage": "https://github.com/yourusername/taskly#readme",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "bin": {
+    "taskly": "./dist/cjs/bin/taskly.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "default": "./dist/cjs/index.js"
+    },
+    "./cli": {
+      "types": "./dist/types/cli/index.d.ts",
+      "import": "./dist/esm/cli/index.js",
+      "require": "./dist/cjs/cli/index.js",
+      "default": "./dist/cjs/cli/index.js"
+    },
+    "./core": {
+      "types": "./dist/types/core/index.d.ts",
+      "import": "./dist/esm/core/index.js",
+      "require": "./dist/cjs/core/index.js",
+      "default": "./dist/cjs/core/index.js"
+    },
+    "./utils": {
+      "types": "./dist/types/utils/index.d.ts",
+      "import": "./dist/esm/utils/index.js",
+      "require": "./dist/cjs/utils/index.js",
+      "default": "./dist/cjs/utils/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "scripts": {
+    "build": "node scripts/build.js",
+    "build:dev": "npm run build",
+    "build:prod": "NODE_ENV=production npm run build",
+    "build:clean": "rm -rf dist",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "build:types": "tsc -p tsconfig.types.json",
+    "dev": "tsc -p tsconfig.cjs.json --watch",
+    "dev:build": "npm run build:dev && npm run dev",
+    "test": "vitest --run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest --run --coverage",
+    "test:ui": "vitest --ui",
+    "test:ci": "vitest --config vitest.ci.config.ts --run --coverage",
+    "test:verbose": "VITEST_VERBOSE=true vitest --run --reporter=verbose",
+    "test:debug": "vitest --run --reporter=verbose --no-coverage",
+    "test:related": "vitest related --run",
+    "test:auto": "node scripts/test.js",
+    "test:auto:coverage": "node scripts/test.js coverage",
+    "test:auto:ci": "node scripts/test.js ci --report",
+    "test:auto:watch": "node scripts/test.js watch",
+    "test:continuous": "node scripts/test.js ci --report --fail-fast",
+    "test:report": "node scripts/test-reporter.js",
+    "test:report:verbose": "node scripts/test-reporter.js --verbose",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "lint:check": "eslint src --ext .ts --max-warnings 0",
+    "format": "prettier --write \"src/**/*.ts\" \"scripts/**/*.js\" \"*.json\" \"*.md\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"scripts/**/*.js\" \"*.json\" \"*.md\"",
+    "type-check": "tsc --noEmit",
+    "type-check:watch": "tsc --noEmit --watch",
+    "quality": "npm run type-check && npm run lint:check && npm run format:check",
+    "quality:fix": "npm run type-check && npm run lint:fix && npm run format",
+    "clean": "rm -rf dist coverage .nyc_output",
+    "dev:setup": "node scripts/dev.js setup",
+    "dev:watch": "node scripts/dev.js watch",
+    "dev:check": "node scripts/dev.js check",
+    "dev:reset": "node scripts/dev.js reset",
+    "prepublishOnly": "npm run quality && npm run build:prod && npm run test"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "@vitest/ui": "^1.6.1",
+    "eslint": "^8.0.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "prettier": "^3.0.0",
+    "terser": "^5.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}

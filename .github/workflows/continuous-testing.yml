@@ -1,0 +1,193 @@
+name: Continuous Testing
+
+on:
+  schedule:
+    # Run tests every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      test_mode:
+        description: 'Test mode to run'
+        required: false
+        default: 'ci'
+        type: choice
+        options:
+          - ci
+          - coverage
+          - verbose
+      fail_fast:
+        description: 'Fail fast on first error'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  continuous-test:
+    name: Continuous Testing
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run continuous testing
+      run: |
+        if [ "${{ github.event.inputs.fail_fast }}" = "true" ]; then
+          npm run test:auto:${{ github.event.inputs.test_mode || 'ci' }} -- --fail-fast
+        else
+          npm run test:auto:${{ github.event.inputs.test_mode || 'ci' }}
+        fi
+    
+    - name: Generate test summary
+      if: always()
+      run: |
+        echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -f "coverage/test-results.json" ]; then
+          echo "### Test Statistics" >> $GITHUB_STEP_SUMMARY
+          node -e "
+            const results = JSON.parse(require('fs').readFileSync('coverage/test-results.json', 'utf8'));
+            console.log('| Metric | Value |');
+            console.log('|--------|-------|');
+            console.log('| Total Tests | ' + (results.numTotalTests || 0) + ' |');
+            console.log('| Passed | ' + (results.numPassedTests || 0) + ' |');
+            console.log('| Failed | ' + (results.numFailedTests || 0) + ' |');
+            console.log('| Skipped | ' + (results.numPendingTests || 0) + ' |');
+          " >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ -f "coverage/coverage-summary.json" ]; then
+          echo "### Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          node -e "
+            const coverage = JSON.parse(require('fs').readFileSync('coverage/coverage-summary.json', 'utf8'));
+            const total = coverage.total;
+            console.log('| Metric | Coverage | Threshold |');
+            console.log('|--------|----------|-----------|');
+            console.log('| Statements | ' + total.statements.pct + '% | 90% |');
+            console.log('| Branches | ' + total.branches.pct + '% | 90% |');
+            console.log('| Functions | ' + total.functions.pct + '% | 90% |');
+            console.log('| Lines | ' + total.lines.pct + '% | 90% |');
+          " >> $GITHUB_STEP_SUMMARY
+        fi
+    
+    - name: Upload test artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: continuous-test-results-${{ github.run_number }}
+        path: |
+          coverage/
+          !coverage/tmp/
+        retention-days: 7
+    
+    - name: Create issue on failure
+      if: failure() && github.event_name == 'schedule'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const title = `🚨 Continuous Testing Failed - ${new Date().toISOString().split('T')[0]}`;
+          const body = `
+          ## Continuous Testing Failure Report
+          
+          **Run ID:** ${{ github.run_id }}
+          **Workflow:** ${{ github.workflow }}
+          **Trigger:** ${{ github.event_name }}
+          **Branch:** ${{ github.ref_name }}
+          **Commit:** ${{ github.sha }}
+          
+          ### Details
+          The continuous testing workflow has failed. Please check the logs and test results.
+          
+          **Actions:**
+          1. Review the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          2. Check test artifacts for detailed results
+          3. Fix any failing tests or coverage issues
+          4. Close this issue once resolved
+          
+          ### Test Artifacts
+          - Test results and coverage reports are available in the workflow artifacts
+          - Coverage reports: \`coverage/\` directory
+          - Test results: \`coverage/test-results.json\`
+          
+          ---
+          *This issue was automatically created by the continuous testing workflow.*
+          `;
+          
+          // Check if similar issue already exists
+          const { data: issues } = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            labels: ['continuous-testing', 'automated'],
+            state: 'open'
+          });
+          
+          if (issues.length === 0) {
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['bug', 'continuous-testing', 'automated', 'priority-high']
+            });
+          }
+
+  health-check:
+    name: Test Health Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Quick health check
+      run: |
+        echo "🏥 Running test suite health check..."
+        npm run test:debug
+        
+        echo "📊 Checking test coverage trends..."
+        npm run test:coverage
+        
+        echo "🔍 Analyzing test performance..."
+        time npm run test:verbose
+    
+    - name: Test suite metrics
+      run: |
+        echo "## Test Suite Health Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Count test files
+        TEST_FILES=$(find src/__tests__ -name "*.test.ts" | wc -l)
+        echo "- **Test Files:** $TEST_FILES" >> $GITHUB_STEP_SUMMARY
+        
+        # Count total test cases (approximate)
+        TEST_CASES=$(grep -r "it\|test\|describe" src/__tests__ --include="*.ts" | wc -l)
+        echo "- **Approximate Test Cases:** $TEST_CASES" >> $GITHUB_STEP_SUMMARY
+        
+        # Check for test file patterns
+        echo "- **Test Coverage:** Available in artifacts" >> $GITHUB_STEP_SUMMARY
+        
+        # Bundle size check
+        npm run build:prod
+        BUNDLE_SIZE=$(du -sh dist/ | cut -f1)
+        echo "- **Bundle Size:** $BUNDLE_SIZE" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,96 @@
+name: Pre-commit Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main, develop]
+
+jobs:
+  pre-commit:
+    name: Pre-commit Quality Gates
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run pre-commit tests
+      run: |
+        echo "🔍 Running pre-commit quality checks..."
+        
+        # Quick test run to catch obvious failures
+        npm run test:auto coverage --fail-fast
+        
+        # Generate test report
+        npm run test:report
+    
+    - name: Check for test changes
+      run: |
+        echo "📝 Checking for test file changes..."
+        
+        # Check if any test files were modified
+        CHANGED_TEST_FILES=$(git diff --name-only HEAD~1 HEAD | grep -E '\.(test|spec)\.(ts|js)$' || true)
+        
+        if [ -n "$CHANGED_TEST_FILES" ]; then
+          echo "✅ Test files were modified:"
+          echo "$CHANGED_TEST_FILES"
+          
+          # Run only the changed tests
+          echo "🧪 Running changed tests..."
+          npm run test:related
+        else
+          echo "ℹ️ No test files were modified"
+        fi
+    
+    - name: Validate test coverage
+      run: |
+        echo "📊 Validating test coverage requirements..."
+        
+        # Check if coverage meets minimum requirements
+        if [ -f "coverage/coverage-summary.json" ]; then
+          node -e "
+            const coverage = JSON.parse(require('fs').readFileSync('coverage/coverage-summary.json', 'utf8'));
+            const total = coverage.total;
+            const minCoverage = 90;
+            
+            const metrics = ['statements', 'branches', 'functions', 'lines'];
+            let failed = false;
+            
+            console.log('Coverage Report:');
+            metrics.forEach(metric => {
+              const pct = total[metric].pct;
+              const status = pct >= minCoverage ? '✅' : '❌';
+              console.log(\`  \${metric}: \${pct.toFixed(2)}% \${status}\`);
+              if (pct < minCoverage) failed = true;
+            });
+            
+            if (failed) {
+              console.error('❌ Coverage requirements not met!');
+              process.exit(1);
+            } else {
+              console.log('✅ All coverage requirements met!');
+            }
+          "
+        fi
+    
+    - name: Upload pre-commit artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: pre-commit-results-${{ github.sha }}
+        path: |
+          coverage/
+          !coverage/tmp/
+        retention-days: 3
