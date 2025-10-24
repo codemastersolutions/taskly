@@ -1,11 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TaskRunner } from '../../core/task-runner.js';
-import {
-  TaskConfig,
-  TaskResult,
-  TasklyError,
-  ERROR_CODES,
-} from '../../types/index.js';
+import { TaskConfig, TasklyError } from '../../types/index.js';
 
 describe('TaskRunner Integration Tests', () => {
   let taskRunner: TaskRunner;
@@ -14,9 +9,9 @@ describe('TaskRunner Integration Tests', () => {
     taskRunner = new TaskRunner();
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     if (taskRunner) {
-      await taskRunner.cleanup();
+      taskRunner.cleanup();
     }
   });
 
@@ -117,13 +112,13 @@ describe('TaskRunner Integration Tests', () => {
       await expect(taskRunner.execute(tasks)).rejects.toThrow(TasklyError);
     });
 
-    it('should stop execution gracefully', async () => {
+    it('should stop execution gracefully', () => {
       // Test that stop() can be called even when not running
-      await expect(taskRunner.stop()).resolves.not.toThrow();
+      expect(() => taskRunner.stop()).not.toThrow();
     });
 
-    it('should cleanup resources', async () => {
-      await expect(taskRunner.cleanup()).resolves.not.toThrow();
+    it('should cleanup resources', () => {
+      expect(() => taskRunner.cleanup()).not.toThrow();
     });
   });
 

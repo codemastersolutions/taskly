@@ -352,10 +352,7 @@ describe('Comprehensive Workflow Tests', () => {
 
         const updatePackageVersion = (newVersion: string) => {
           try {
-            const content = mockFs.readFileSync(
-              'package.json',
-              'utf8'
-            ) as string;
+            const content = mockFs.readFileSync('package.json', 'utf8');
             const packageJson = JSON.parse(content);
             packageJson.version = newVersion;
 
@@ -451,7 +448,7 @@ describe('Comprehensive Workflow Tests', () => {
       });
 
       it('should handle PR validation failures', async () => {
-        const simulateFailingPRValidation = async () => {
+        const simulateFailingPRValidation = () => {
           const steps = [
             { name: 'Checkout', success: true },
             { name: 'Setup Node.js', success: true },
@@ -476,7 +473,7 @@ describe('Comprehensive Workflow Tests', () => {
 
     describe('Auto-Publish Workflow', () => {
       it('should simulate complete auto-publish pipeline', async () => {
-        const simulateAutoPublish = async () => {
+        const simulateAutoPublish = () => {
           const jobs = [
             {
               name: 'Version Management',
@@ -517,7 +514,7 @@ describe('Comprehensive Workflow Tests', () => {
       });
 
       it('should handle publish failures', async () => {
-        const simulateFailingPublish = async () => {
+        const simulateFailingPublish = () => {
           const jobs = [
             { name: 'Version Management', success: true },
             { name: 'Pre-publish Validation', success: true },

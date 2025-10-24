@@ -1,25 +1,25 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { TaskRunner } from '../../core/task-runner.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProcessManager } from '../../core/process-manager.js';
+import { TaskRunner } from '../../core/task-runner.js';
 import {
-  TasklyError,
+  GlobalErrorHandler,
+  LogLevel,
+  initializeGlobalErrorHandling,
+} from '../../errors/global-handler.js';
+import {
   ERROR_CODES,
   ErrorFactory,
   SecurityError,
+  TasklyError,
 } from '../../errors/index.js';
-import {
-  GlobalErrorHandler,
-  initializeGlobalErrorHandling,
-  LogLevel,
-} from '../../errors/global-handler.js';
 import { TaskConfig } from '../../types/index.js';
 
 // Mock console methods to avoid noise in tests
-const mockConsoleError = vi
+const _mockConsoleError = vi
   .spyOn(console, 'error')
   .mockImplementation(() => {});
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
-const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+const _mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+const _mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
 describe('Error Handling Integration Tests', () => {
   let globalHandler: GlobalErrorHandler;
@@ -48,9 +48,9 @@ describe('Error Handling Integration Tests', () => {
     });
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     if (taskRunner) {
-      await taskRunner.cleanup();
+      taskRunner.cleanup();
     }
     if (globalHandler) {
       globalHandler.removeAllListeners();
@@ -139,8 +139,8 @@ describe('Error Handling Integration Tests', () => {
       processManager = new ProcessManager();
     });
 
-    afterEach(async () => {
-      await processManager.cleanup();
+    afterEach(() => {
+      processManager.cleanup();
     });
 
     it('should handle security violations in command validation', async () => {
@@ -257,7 +257,7 @@ describe('Error Handling Integration Tests', () => {
   });
 
   describe('Error Context Propagation', () => {
-    it('should propagate error context through the system', async () => {
+    it('should propagate error context through the system', () => {
       const taskWithContext: TaskConfig = {
         command: 'echo "test"',
         identifier: 'context-task',
@@ -460,7 +460,7 @@ describe('Error Handling Integration Tests', () => {
       globalHandler.addShutdownCallback(customCleanup);
 
       // Mock graceful shutdown to avoid process.exit
-      const gracefulShutdownSpy = vi
+      const _gracefulShutdownSpy = vi
         .spyOn(globalHandler, 'gracefulShutdown')
         .mockImplementation(async () => {
           // Simulate callback execution
@@ -488,7 +488,7 @@ describe('Error Handling Integration Tests', () => {
       globalHandler.addShutdownCallback(successfulCleanup);
 
       // Mock the internal callback execution to simulate error handling
-      const executeCallbacksSpy = vi
+      const _executeCallbacksSpy = vi
         .spyOn(globalHandler as any, 'executeShutdownCallbacks')
         .mockImplementation(async () => {
           await Promise.all([
@@ -498,7 +498,7 @@ describe('Error Handling Integration Tests', () => {
         });
 
       // Mock graceful shutdown
-      const gracefulShutdownSpy = vi
+      const _gracefulShutdownSpy = vi
         .spyOn(globalHandler, 'gracefulShutdown')
         .mockImplementation(async () => {
           await (globalHandler as any).executeShutdownCallbacks();

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock child_process module before importing ProcessManager
 vi.mock('child_process', () => {
@@ -25,9 +25,9 @@ vi.mock('child_process', () => {
   };
 });
 
-import { ProcessManager, ProcessOptions } from '../../core/process-manager.js';
-import { TaskConfig, TasklyError, ERROR_CODES } from '../../types/index.js';
 import { spawn } from 'child_process';
+import { ProcessManager, ProcessOptions } from '../../core/process-manager.js';
+import { TaskConfig, TasklyError } from '../../types/index.js';
 
 const mockSpawn = vi.mocked(spawn);
 
@@ -45,8 +45,8 @@ describe('ProcessManager', () => {
     vi.clearAllMocks();
   });
 
-  afterEach(async () => {
-    await processManager.cleanup();
+  afterEach(() => {
+    processManager.cleanup();
   });
 
   describe('spawn', () => {
@@ -479,7 +479,7 @@ describe('ProcessManager', () => {
 
       expect(processManager.getAllProcessInfo()).toHaveLength(2);
 
-      await processManager.cleanup();
+      processManager.cleanup();
 
       expect(processManager.getAllProcessInfo()).toHaveLength(0);
     });
@@ -495,7 +495,7 @@ describe('ProcessManager', () => {
       expect(processManager.getProcessInfo('test')).toBeDefined();
       expect(processManager.getOutput('test')).toBeDefined();
 
-      await processManager.cleanup();
+      processManager.cleanup();
 
       expect(processManager.getProcessInfo('test')).toBeUndefined();
       expect(processManager.getOutput('test')).toEqual([]);

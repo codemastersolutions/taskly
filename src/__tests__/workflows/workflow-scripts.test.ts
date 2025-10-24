@@ -242,7 +242,7 @@ describe('Workflow Scripts Unit Tests', () => {
 
       const readPackageJson = () => {
         try {
-          const content = mockFs.readFileSync('package.json', 'utf8') as string;
+          const content = mockFs.readFileSync('package.json', 'utf8');
           return JSON.parse(content);
         } catch (error) {
           throw new Error('Failed to read package.json');
@@ -285,7 +285,7 @@ describe('Workflow Scripts Unit Tests', () => {
 
       const readPackageJson = () => {
         try {
-          const content = mockFs.readFileSync('package.json', 'utf8') as string;
+          const content = mockFs.readFileSync('package.json', 'utf8');
           return { success: true, data: JSON.parse(content) };
         } catch (error) {
           return { success: false, error: error.message };
@@ -369,7 +369,7 @@ describe('Workflow Scripts Unit Tests', () => {
 
   describe('Workflow Integration Scenarios', () => {
     it('should simulate PR validation workflow', async () => {
-      const simulatePRValidation = async () => {
+      const simulatePRValidation = () => {
         const steps = [];
 
         try {
@@ -402,7 +402,7 @@ describe('Workflow Scripts Unit Tests', () => {
     });
 
     it('should simulate auto-publish workflow', async () => {
-      const simulateAutoPublish = async () => {
+      const simulateAutoPublish = () => {
         const steps = [];
 
         try {
@@ -439,7 +439,7 @@ describe('Workflow Scripts Unit Tests', () => {
     });
 
     it('should handle workflow failures gracefully', async () => {
-      const simulateFailingWorkflow = async () => {
+      const simulateFailingWorkflow = () => {
         const steps = [];
 
         try {

@@ -1,19 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'fs';
 import { join } from 'path';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  fileExists,
-  directoryExists,
-  validateWorkingDirectory,
   detectPackageManagerFromLockFiles,
   detectPackageManagerFromPackageJson,
-  detectPackageManager,
+  directoryExists,
+  fileExists,
   findConfigFile,
   loadJsonConfig,
-  loadConfig,
   resolveWorkingDirectory,
   safeReadFile,
   safeWriteFile,
+  validateWorkingDirectory,
 } from '../../utils/file-system.js';
 
 // Mock fs module

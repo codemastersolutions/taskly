@@ -3,14 +3,14 @@
  * Handles loading and parsing of Taskly configuration files
  */
 
-import { readFileSync, existsSync } from 'fs';
-import { resolve, extname } from 'path';
+import { existsSync, readFileSync } from 'fs';
+import { extname, resolve } from 'path';
 import {
+  CLIOptions,
+  ERROR_CODES,
+  TaskConfig,
   TasklyConfig,
   TasklyError,
-  ERROR_CODES,
-  CLIOptions,
-  TaskConfig,
 } from '../types/index.js';
 
 /**
@@ -163,7 +163,7 @@ export class ConfigLoader {
     if (env.TASKLY_PACKAGE_MANAGER) {
       const pm = env.TASKLY_PACKAGE_MANAGER.toLowerCase();
       if (['npm', 'yarn', 'pnpm', 'bun'].includes(pm)) {
-        options.packageManager = pm as any;
+        options.packageManager = pm as PackageManager;
       }
     }
 
@@ -237,7 +237,7 @@ export class ConfigLoader {
     for (const [name, taskConfig] of filteredEntries) {
       tasks.push({
         ...taskConfig,
-        identifier: taskConfig.identifier || name,
+        identifier: taskConfig.identifier ?? name,
       });
     }
 
@@ -353,18 +353,21 @@ export class ConfigLoader {
    * Simple YAML parser for basic configuration (no dependencies)
    * Supports basic key-value pairs, arrays, and nested objects
    */
-  private parseSimpleYAML(content: string): any {
+  private parseSimpleYAML(content: string): Record<string, unknown> {
     const lines = content.split('\n').map(line => line.replace(/\r$/, ''));
-    const result: any = {};
-    const stack: Array<{ obj: any; indent: number; isArray?: boolean }> = [
-      { obj: result, indent: -1 },
-    ];
+    const result: Record<string, unknown> = {};
+    const stack: Array<{
+      obj: Record<string, unknown> | unknown[];
+      indent: number;
+      isArray?: boolean;
+    }> = [{ obj: result, indent: -1 }];
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const trimmed = line.trim();
 
       // Skip empty lines and comments
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
       if (!trimmed || trimmed.startsWith('#')) {
         continue;
       }
@@ -391,18 +394,19 @@ export class ConfigLoader {
 
           if (nextTrimmed.startsWith('- ')) {
             // This is an array
-            const newArray: any[] = [];
-            parent.obj[key] = newArray;
+            const newArray: unknown[] = [];
+            (parent.obj as Record<string, unknown>)[key] = newArray;
             stack.push({ obj: newArray, indent, isArray: true });
           } else {
             // This is an object
-            const newObj = {};
-            parent.obj[key] = newObj;
+            const newObj: Record<string, unknown> = {};
+            (parent.obj as Record<string, unknown>)[key] = newObj;
             stack.push({ obj: newObj, indent });
           }
         } else {
           // Value key
-          parent.obj[key] = this.parseYAMLValue(valueStr);
+          (parent.obj as Record<string, unknown>)[key] =
+            this.parseYAMLValue(valueStr);
         }
       } else if (trimmed.startsWith('- ')) {
         // Array item
@@ -416,15 +420,15 @@ export class ConfigLoader {
 
         if (value.includes(':')) {
           // Object in array
-          const obj = {};
+          const obj: Record<string, unknown> = {};
           const colonIndex = value.indexOf(':');
           const key = value.substring(0, colonIndex).trim();
           const valueStr = value.substring(colonIndex + 1).trim();
-          (obj as any)[key] = this.parseYAMLValue(valueStr);
-          parent.obj.push(obj);
+          obj[key] = this.parseYAMLValue(valueStr);
+          (parent.obj as unknown[]).push(obj);
         } else {
           // Simple value in array
-          parent.obj.push(this.parseYAMLValue(value));
+          (parent.obj as unknown[]).push(this.parseYAMLValue(value));
         }
       }
     }
@@ -435,8 +439,9 @@ export class ConfigLoader {
   /**
    * Parse YAML value (string, number, boolean, array)
    */
-  private parseYAMLValue(value: string): any {
+  private parseYAMLValue(value: string): unknown {
     // Handle quoted strings
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Boolean logic for quote checking
     if (
       (value.startsWith('"') && value.endsWith('"')) ||
       (value.startsWith("'") && value.endsWith("'"))
@@ -475,7 +480,7 @@ export class ConfigLoader {
     try {
       // Use dynamic import to load the config file
       const configModule = await import(`file://${configPath}`);
-      const config = configModule.default || configModule;
+      const config = configModule.default ?? configModule;
       return this.validateConfig(config, configPath);
     } catch (error) {
       throw new TasklyError(
@@ -490,7 +495,8 @@ export class ConfigLoader {
   /**
    * Validate configuration object
    */
-  private validateConfig(config: any, configPath: string): TasklyConfig {
+  private validateConfig(config: unknown, configPath: string): TasklyConfig {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
     if (!config || typeof config !== 'object') {
       throw new TasklyError(
         `Configuration must be an object: ${configPath}`,
@@ -499,51 +505,57 @@ export class ConfigLoader {
     }
 
     // Validate package manager if specified
-    if (config.packageManager) {
+    if ((config as Record<string, unknown>).packageManager) {
       const validPMs = ['npm', 'yarn', 'pnpm', 'bun'];
-      if (!validPMs.includes(config.packageManager)) {
+      const packageManager = (config as Record<string, unknown>)
+        .packageManager as string;
+      if (!validPMs.includes(packageManager)) {
         throw new TasklyError(
-          `Invalid package manager in config: ${config.packageManager}. Valid options: ${validPMs.join(', ')}`,
+          `Invalid package manager in config: ${packageManager}. Valid options: ${validPMs.join(', ')}`,
           ERROR_CODES.CONFIG_ERROR
         );
       }
     }
 
     // Validate maxConcurrency if specified
-    if (config.maxConcurrency !== undefined) {
-      if (
-        typeof config.maxConcurrency !== 'number' ||
-        config.maxConcurrency <= 0
-      ) {
+    const maxConcurrency = (config as Record<string, unknown>).maxConcurrency;
+    if (maxConcurrency !== undefined) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Boolean logic for validation
+      if (typeof maxConcurrency !== 'number' || maxConcurrency <= 0) {
         throw new TasklyError(
-          `maxConcurrency must be a positive number: ${config.maxConcurrency}`,
+          `maxConcurrency must be a positive number: ${maxConcurrency}`,
           ERROR_CODES.CONFIG_ERROR
         );
       }
     }
 
     // Validate killOthersOnFail if specified
+    const killOthersOnFail = (config as Record<string, unknown>)
+      .killOthersOnFail;
     if (
-      config.killOthersOnFail !== undefined &&
-      typeof config.killOthersOnFail !== 'boolean'
+      killOthersOnFail !== undefined &&
+      typeof killOthersOnFail !== 'boolean'
     ) {
       throw new TasklyError(
-        `killOthersOnFail must be a boolean: ${config.killOthersOnFail}`,
+        `killOthersOnFail must be a boolean: ${killOthersOnFail}`,
         ERROR_CODES.CONFIG_ERROR
       );
     }
 
     // Validate colors if specified
-    if (config.colors && !Array.isArray(config.colors)) {
+    const colors = (config as Record<string, unknown>).colors;
+    if (colors && !Array.isArray(colors)) {
       throw new TasklyError(
-        `colors must be an array: ${config.colors}`,
+        `colors must be an array: ${colors}`,
         ERROR_CODES.CONFIG_ERROR
       );
     }
 
     // Validate tasks if specified
-    if (config.tasks) {
-      if (typeof config.tasks !== 'object' || Array.isArray(config.tasks)) {
+    const tasks = (config as Record<string, unknown>).tasks;
+    if (tasks) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Boolean logic for validation
+      if (typeof tasks !== 'object' || Array.isArray(tasks)) {
         throw new TasklyError(
           `tasks must be an object with task definitions`,
           ERROR_CODES.CONFIG_ERROR
@@ -551,8 +563,12 @@ export class ConfigLoader {
       }
 
       // Validate each task
-      for (const [taskName, taskConfig] of Object.entries(config.tasks)) {
-        this.validateTaskConfig(taskName, taskConfig as any, configPath);
+      for (const [taskName, taskConfig] of Object.entries(tasks)) {
+        this.validateTaskConfig(
+          taskName,
+          taskConfig as Record<string, unknown>,
+          configPath
+        );
       }
     }
 
@@ -564,9 +580,10 @@ export class ConfigLoader {
    */
   private validateTaskConfig(
     taskName: string,
-    taskConfig: any,
+    taskConfig: Record<string, unknown>,
     configPath: string
   ): void {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
     if (!taskConfig || typeof taskConfig !== 'object') {
       throw new TasklyError(
         `Task "${taskName}" must be an object: ${configPath}`,
@@ -574,6 +591,7 @@ export class ConfigLoader {
       );
     }
 
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
     if (!taskConfig.command || typeof taskConfig.command !== 'string') {
       throw new TasklyError(
         `Task "${taskName}" must have a command string: ${configPath}`,
@@ -583,7 +601,7 @@ export class ConfigLoader {
 
     if (taskConfig.packageManager) {
       const validPMs = ['npm', 'yarn', 'pnpm', 'bun'];
-      if (!validPMs.includes(taskConfig.packageManager)) {
+      if (!validPMs.includes(taskConfig.packageManager as string)) {
         throw new TasklyError(
           `Invalid package manager for task "${taskName}": ${taskConfig.packageManager}`,
           ERROR_CODES.CONFIG_ERROR
@@ -679,11 +697,15 @@ export default ${JSON.stringify(exampleConfig, null, 2)};
   /**
    * Convert object to simple YAML format
    */
-  private objectToYAML(obj: any, indent: number = 0): string {
+  private objectToYAML(
+    obj: Record<string, unknown>,
+    indent: number = 0
+  ): string {
     const spaces = '  '.repeat(indent);
     let yaml = '';
 
     for (const [key, value] of Object.entries(obj)) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Explicit null/undefined check
       if (value === null || value === undefined) {
         yaml += `${spaces}${key}: null\n`;
       } else if (typeof value === 'boolean') {
@@ -703,7 +725,7 @@ export default ${JSON.stringify(exampleConfig, null, 2)};
         }
       } else if (typeof value === 'object') {
         yaml += `${spaces}${key}:\n`;
-        yaml += this.objectToYAML(value, indent + 1);
+        yaml += this.objectToYAML(value as Record<string, unknown>, indent + 1);
       }
     }
 

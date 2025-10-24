@@ -4,14 +4,14 @@
  */
 
 import {
-  TaskConfig,
-  TasklyOptions,
   CLIOptions,
-  PackageManager,
   Color,
-  ValidationResult,
-  TasklyError,
   ERROR_CODES,
+  PackageManager,
+  TaskConfig,
+  TasklyError,
+  TasklyOptions,
+  ValidationResult,
 } from '../types/index.js';
 
 // Security patterns for command validation
@@ -36,6 +36,7 @@ export function validateCommand(command: string): ValidationResult {
   const warnings: string[] = [];
 
   // Basic validation
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
   if (!command || typeof command !== 'string') {
     errors.push('Command must be a non-empty string');
     return { valid: false, errors, warnings };
@@ -67,6 +68,7 @@ export function validateCommand(command: string): ValidationResult {
   }
 
   // Check for common issues
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Boolean logic for shell operator detection
   if (trimmedCommand.includes('&&') || trimmedCommand.includes('||')) {
     warnings.push(
       'Command contains shell operators - consider splitting into separate tasks'
@@ -84,6 +86,7 @@ export function validateCommand(command: string): ValidationResult {
  * Sanitizes a command string by removing or escaping dangerous characters
  */
 export function sanitizeCommand(command: string): string {
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
   if (!command || typeof command !== 'string') {
     return '';
   }
@@ -102,6 +105,7 @@ export function validateIdentifier(identifier: string): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
   if (!identifier || typeof identifier !== 'string') {
     errors.push('Identifier must be a non-empty string');
     return { valid: false, errors, warnings };
@@ -139,6 +143,7 @@ export function validateColor(color: string): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
   if (!color || typeof color !== 'string') {
     errors.push('Color must be a non-empty string');
     return { valid: false, errors, warnings };
@@ -200,6 +205,7 @@ export function validatePackageManager(pm: string): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
   if (!pm || typeof pm !== 'string') {
     errors.push('Package manager must be a non-empty string');
     return { valid: false, errors, warnings };
@@ -228,6 +234,7 @@ export function validateWorkingDirectory(cwd: string): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
   if (!cwd || typeof cwd !== 'string') {
     errors.push('Working directory must be a non-empty string');
     return { valid: false, errors, warnings };
@@ -247,6 +254,7 @@ export function validateWorkingDirectory(cwd: string): ValidationResult {
   }
 
   // Check for absolute vs relative paths
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Boolean logic for path type detection
   if (trimmed.startsWith('/') || /^[A-Za-z]:/.test(trimmed)) {
     warnings.push('Using absolute path for working directory');
   }
@@ -265,6 +273,7 @@ export function validateTaskConfig(config: TaskConfig): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
   if (!config || typeof config !== 'object') {
     errors.push('Task configuration must be an object');
     return { valid: false, errors, warnings };
@@ -319,6 +328,7 @@ export function validateTasklyOptions(
   const errors: string[] = [];
   const warnings: string[] = [];
 
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
   if (!options || typeof options !== 'object') {
     errors.push('Options must be an object');
     return { valid: false, errors, warnings };
@@ -385,6 +395,7 @@ export function validateCLIOptions(options: CLIOptions): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
   if (!options || typeof options !== 'object') {
     errors.push('CLI options must be an object');
     return { valid: false, errors, warnings };

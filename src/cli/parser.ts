@@ -5,9 +5,9 @@
 
 import {
   CLIOptions,
+  ERROR_CODES,
   PackageManager,
   TasklyError,
-  ERROR_CODES,
 } from '../types/index.js';
 
 export interface ParsedArgs {
@@ -311,6 +311,7 @@ export class ArgumentParser {
    */
   private validateOptions(options: CLIOptions): void {
     // If help or version is requested, no other validation needed
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Boolean logic for flag checking
     if (options.help || options.version) {
       return;
     }

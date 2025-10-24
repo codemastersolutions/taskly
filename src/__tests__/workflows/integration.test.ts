@@ -253,7 +253,7 @@ jobs:
 });
 
 // Helper functions to simulate workflow steps
-async function simulateQualityGates() {
+function simulateQualityGates() {
   try {
     // Simulate ESLint
     mockExecSync('eslint src --ext .ts --max-warnings 0');
@@ -270,7 +270,7 @@ async function simulateQualityGates() {
   }
 }
 
-async function simulateSecurityAudit() {
+function simulateSecurityAudit() {
   try {
     // Simulate npm audit
     mockExecSync('npm audit --audit-level moderate');
@@ -281,7 +281,7 @@ async function simulateSecurityAudit() {
   }
 }
 
-async function simulateTestMatrix() {
+function simulateTestMatrix() {
   try {
     // Simulate test execution
     mockExecSync('npm test');
@@ -292,7 +292,7 @@ async function simulateTestMatrix() {
   }
 }
 
-async function simulateBuildValidation() {
+function simulateBuildValidation() {
   try {
     // Simulate build
     mockExecSync('npm run build:prod');
@@ -303,7 +303,7 @@ async function simulateBuildValidation() {
   }
 }
 
-async function simulateVersionManagement() {
+function simulateVersionManagement() {
   try {
     // Simulate version analysis
     const currentVersion = '1.0.0';
@@ -321,7 +321,7 @@ async function simulateVersionManagement() {
   }
 }
 
-async function simulateNpmPublish() {
+function simulateNpmPublish() {
   try {
     // Simulate npm publish
     mockExecSync('npm publish');
@@ -332,7 +332,7 @@ async function simulateNpmPublish() {
   }
 }
 
-async function simulateGitHubRelease(shouldFail = false) {
+function simulateGitHubRelease(shouldFail = false) {
   try {
     if (shouldFail) {
       throw new Error('GitHub API error');
@@ -359,7 +359,7 @@ function validateWorkflowEnvironment() {
   };
 }
 
-async function validateWorkflowFile(filePath: string) {
+function validateWorkflowFile(filePath: string) {
   try {
     if (!mockFs.existsSync(filePath)) {
       return { valid: false, error: `Workflow file ${filePath} not found` };

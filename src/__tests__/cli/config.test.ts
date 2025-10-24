@@ -2,11 +2,11 @@
  * Configuration Loading Tests
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { writeFileSync, unlinkSync, existsSync, mkdirSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ConfigLoader, loadConfig, mergeConfig } from '../../cli/config.js';
-import { TasklyError, ERROR_CODES, CLIOptions } from '../../types/index.js';
+import { CLIOptions } from '../../types/index.js';
 
 describe('ConfigLoader', () => {
   let loader: ConfigLoader;

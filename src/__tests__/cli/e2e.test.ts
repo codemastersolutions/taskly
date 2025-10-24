@@ -81,7 +81,7 @@ describe('Taskly CLI E2E Tests', () => {
       const command = `node "${cliPath}" "echo Hello CLI"`;
 
       try {
-        const { stdout, stderr } = await execAsync(command, {
+        const { stdout } = await execAsync(command, {
           cwd: tempDir,
           timeout: 10000,
         });
@@ -333,7 +333,7 @@ tasks:
         expect(false).toBe(true);
       } catch (error: any) {
         expect(error.code).toBe(1);
-        expect(error.stderr || error.stdout).toContain('❌');
+        expect(error.stderr ?? error.stdout).toContain('❌');
       }
     });
 
@@ -357,7 +357,7 @@ tasks:
         expect(false).toBe(true);
       } catch (error: any) {
         expect(error.code).toBe(1);
-        expect(error.stderr || error.stdout).toContain('Configuration Error');
+        expect(error.stderr ?? error.stdout).toContain('Configuration Error');
       }
     });
 
@@ -378,7 +378,7 @@ tasks:
         expect(false).toBe(true);
       } catch (error: any) {
         expect(error.code).toBe(1);
-        expect(error.stderr || error.stdout).toContain(
+        expect(error.stderr ?? error.stdout).toContain(
           'Configuration file not found'
         );
       }
@@ -470,7 +470,7 @@ tasks:
         child.kill('SIGINT');
       }, 1000);
 
-      child.on('exit', (code, signal) => {
+      child.on('exit', code => {
         expect(code).not.toBe(0); // Should exit with non-zero code
         expect(output).toContain('🛑'); // Should show stopping message
         done();

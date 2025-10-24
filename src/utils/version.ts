@@ -96,6 +96,7 @@ export function parseConventionalCommit(
 
   // Check for breaking changes in body/footer
   const breakingMatch = body.match(BREAKING_CHANGE_REGEX);
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Boolean conversion logic
   const isBreaking = !!breaking || !!breakingMatch;
 
   // Extract footer (typically starts with keywords like "BREAKING CHANGE:", "Closes:", etc.)
@@ -111,7 +112,9 @@ export function parseConventionalCommit(
     type: type as ConventionalCommit['type'],
     scope,
     description,
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Intentionally converting empty strings to undefined
     body: body || undefined,
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Intentionally converting empty strings to undefined
     footer: footer || undefined,
     isBreaking,
     raw: commitMessage,
@@ -179,6 +182,7 @@ export function determineVersionIncrement(
     return 'minor';
   }
 
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Boolean logic for version determination
   if (analysis.hasFixes || analysis.conventionalCommits.length > 0) {
     return 'patch';
   }
@@ -206,6 +210,7 @@ export function parseVersion(version: string): {
 
   const [major, minor, patch] = parts.map(part => {
     const num = parseInt(part, 10);
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Boolean logic for validation
     if (isNaN(num) || num < 0) {
       throw new Error(
         `Invalid version component: ${part}. Must be a non-negative integer`
@@ -263,6 +268,7 @@ export function calculateNewVersion(
   }
 
   // Find the most significant commit SHA
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Boolean logic for commit filtering
   const commitSha = analysis.conventionalCommits.find(
     c => c.isBreaking || c.type === 'feat' || c.type === 'fix'
   )?.sha;

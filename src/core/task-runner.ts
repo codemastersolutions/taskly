@@ -136,7 +136,7 @@ export class TaskRunner extends EventEmitter {
       this.setupGlobalTimeout();
 
       // Validate and prepare tasks
-      const taskStates = await this.prepareTasks(tasks);
+      const taskStates = this.prepareTasks(tasks);
 
       // Initialize task queue with dependency-aware ordering
       this.taskQueue = this.orderTasksByDependencies(taskStates);
@@ -216,7 +216,7 @@ export class TaskRunner extends EventEmitter {
   /**
    * Stop all running tasks
    */
-  async stop(signal: NodeJS.Signals = 'SIGTERM'): Promise<void> {
+  stop(signal: NodeJS.Signals = 'SIGTERM'): void {
     if (!this.isRunning) {
       return;
     }
@@ -235,7 +235,7 @@ export class TaskRunner extends EventEmitter {
     this.taskQueue = [];
 
     // Terminate all running processes
-    await this.processManager.terminateAll(signal);
+    this.processManager.terminateAll(signal);
 
     this.isRunning = false;
     this.emit('execution:stopped', { signal });
@@ -279,7 +279,7 @@ export class TaskRunner extends EventEmitter {
   /**
    * Prepare and validate tasks for execution
    */
-  private async prepareTasks(tasks: TaskConfig[]): Promise<TaskState[]> {
+  private prepareTasks(tasks: TaskConfig[]): TaskState[] {
     if (!tasks || tasks.length === 0) {
       throw new TasklyError(
         'No tasks provided for execution',
@@ -433,7 +433,7 @@ export class TaskRunner extends EventEmitter {
 
       // Resolve package manager and command with validation
       const { resolvedCommand, packageManagerInfo } =
-        await this.resolveCommandWithValidation(taskState.config);
+        this.resolveCommandWithValidation(taskState.config);
 
       // Emit task start event with detailed information
       this.emit('task:start', {
@@ -449,7 +449,7 @@ export class TaskRunner extends EventEmitter {
       });
 
       // Start the process
-      const processInfo = await this.processManager.spawn(
+      const processInfo = this.processManager.spawn(
         {
           ...taskState.config,
           command: resolvedCommand,
@@ -470,10 +470,10 @@ export class TaskRunner extends EventEmitter {
   /**
    * Resolve command with package manager validation and detailed info
    */
-  private async resolveCommandWithValidation(config: TaskConfig): Promise<{
+  private resolveCommandWithValidation(config: TaskConfig): {
     resolvedCommand: string;
     packageManagerInfo?: { name: string; version: string; source: string };
-  }> {
+  } {
     if (!config.packageManager) {
       return { resolvedCommand: config.command };
     }
@@ -702,7 +702,7 @@ export class TaskRunner extends EventEmitter {
    */
   private async waitForCompletion(): Promise<TaskResult[]> {
     return new Promise((resolve, reject) => {
-      const checkCompletion = () => {
+      const checkCompletion = (): void => {
         const totalTasks = this.tasks.size;
         const finishedTasks =
           this.completedTasks.size +
@@ -762,7 +762,7 @@ export class TaskRunner extends EventEmitter {
       }, this.globalTimeout + 60000); // 1 minute after global timeout
 
       // Clean up on completion
-      const cleanup = () => {
+      const cleanup = (): void => {
         clearInterval(completionTimer);
         clearTimeout(safetyTimeout);
       };
@@ -936,7 +936,7 @@ export class TaskRunner extends EventEmitter {
     this.processManager.on(
       'process:complete',
       (identifier: string, result: TaskResult) => {
-        this.handleTaskComplete(identifier, result);
+        void this.handleTaskComplete(identifier, result);
       }
     );
 
@@ -946,7 +946,7 @@ export class TaskRunner extends EventEmitter {
       (identifier: string, error: TasklyError) => {
         const taskState = this.tasks.get(identifier);
         if (taskState) {
-          this.handleTaskError(taskState, error);
+          void this.handleTaskError(taskState, error);
         }
       }
     );
@@ -1010,7 +1010,14 @@ export class TaskRunner extends EventEmitter {
     // Resource monitoring events
     this.processManager.on(
       'process:resource-check',
-      (identifier: string, resourceInfo: any) => {
+      (
+        identifier: string,
+        resourceInfo: {
+          cpu?: number;
+          memory?: number;
+          pid?: number;
+        }
+      ) => {
         this.emit('task:resource-check', {
           identifier,
           ...resourceInfo,
@@ -1169,14 +1176,14 @@ export class TaskRunner extends EventEmitter {
       return;
     }
 
-    this.globalTimeoutId = setTimeout(async () => {
+    this.globalTimeoutId = setTimeout(() => {
       this.emit('execution:global-timeout', {
         timeout: this.globalTimeout,
         runningTasks: Array.from(this.runningTasks),
         pendingTasks: this.taskQueue.filter(t => t.status === 'pending').length,
       });
 
-      await this.stop('SIGKILL');
+      this.stop('SIGKILL');
 
       throw new TasklyError(
         `Global execution timeout reached (${this.globalTimeout}ms)`,
@@ -1488,11 +1495,11 @@ export class TaskRunner extends EventEmitter {
     const globalHandler = GlobalErrorHandler.getInstance();
 
     // Add TaskRunner cleanup to global shutdown callbacks
-    globalHandler.addShutdownCallback(async () => {
+    globalHandler.addShutdownCallback(() => {
       if (this.isRunning) {
-        await this.stop('SIGTERM');
+        this.stop('SIGTERM');
       }
-      await this.cleanup();
+      this.cleanup();
     });
 
     // Handle global errors from TaskRunner
@@ -1542,13 +1549,13 @@ export class TaskRunner extends EventEmitter {
   /**
    * Clean up resources
    */
-  async cleanup(): Promise<void> {
+  cleanup(): void {
     if (this.globalTimeoutId) {
       clearTimeout(this.globalTimeoutId);
     }
 
-    await this.stop('SIGKILL');
-    await this.processManager.cleanup();
+    this.stop('SIGKILL');
+    this.processManager.cleanup();
     this.removeAllListeners();
   }
 }

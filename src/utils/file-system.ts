@@ -4,12 +4,12 @@
  */
 
 import { promises as fs } from 'fs';
-import { join, resolve, dirname, basename } from 'path';
+import { basename, dirname, join, resolve } from 'path';
 import {
+  ERROR_CODES,
   PackageManager,
   TasklyConfig,
   TasklyError,
-  ERROR_CODES,
   ValidationResult,
 } from '../types/index.js';
 
@@ -63,6 +63,7 @@ export async function validateWorkingDirectory(
   const errors: string[] = [];
   const warnings: string[] = [];
 
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
   if (!cwd || typeof cwd !== 'string') {
     errors.push('Working directory must be a non-empty string');
     return { valid: false, errors, warnings };
@@ -220,6 +221,7 @@ export async function loadJsonConfig(
     const configContent = await fs.readFile(configPath, 'utf-8');
     const config = JSON.parse(configContent);
 
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
     if (!config || typeof config !== 'object') {
       throw new TasklyError(
         'Configuration file must contain a valid JSON object',
@@ -251,8 +253,9 @@ export async function loadJsConfig(configPath: string): Promise<TasklyConfig> {
     const configModule = await import(fileUrl);
 
     // Handle both default export and named exports
-    const config = configModule.default || configModule;
+    const config = configModule.default ?? configModule;
 
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
     if (!config || typeof config !== 'object') {
       throw new TasklyError(
         'Configuration file must export a valid configuration object',

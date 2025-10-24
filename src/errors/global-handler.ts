@@ -329,7 +329,7 @@ export class GlobalErrorHandler extends EventEmitter {
       this.handleError(tasklyError, { type: 'uncaughtException' });
 
       // Always exit on uncaught exceptions after logging
-      this.gracefulShutdown(1);
+      void this.gracefulShutdown(1);
     });
   }
 
@@ -376,7 +376,7 @@ export class GlobalErrorHandler extends EventEmitter {
       process.on(signal, () => {
         this.log(LogLevel.INFO, `Received ${signal} signal`);
         this.emit('signal', { signal });
-        this.gracefulShutdown(0);
+        void this.gracefulShutdown(0);
       });
     }
   }
@@ -444,24 +444,30 @@ export class GlobalErrorHandler extends EventEmitter {
     switch (entry.level) {
       case LogLevel.FATAL:
       case LogLevel.ERROR:
+        // eslint-disable-next-line no-console -- Error logging output
         console.error(message);
         if (entry.error?.stack) {
+          // eslint-disable-next-line no-console -- Error stack trace output
           console.error(entry.error.stack);
         }
         break;
       case LogLevel.WARN:
+        // eslint-disable-next-line no-console -- Warning logging output
         console.warn(message);
         break;
       case LogLevel.INFO:
+        // eslint-disable-next-line no-console -- Info logging output
         console.info(message);
         break;
       case LogLevel.DEBUG:
+        // eslint-disable-next-line no-console -- Debug logging output
         console.debug(message);
         break;
     }
 
     // Log context if available
     if (entry.context && Object.keys(entry.context).length > 0) {
+      // eslint-disable-next-line no-console -- Context logging output
       console.log('Context:', JSON.stringify(entry.context, null, 2));
     }
   }
@@ -494,6 +500,7 @@ export class GlobalErrorHandler extends EventEmitter {
       fs.appendFileSync(this.options.logFilePath, '\n');
     } catch (fileError) {
       // Fallback to console if file logging fails
+      // eslint-disable-next-line no-console -- File logging fallback error
       console.error('Failed to write to log file:', fileError);
     }
   }

@@ -183,10 +183,11 @@ export function padText(
   switch (align) {
     case 'right':
       return ' '.repeat(padding) + text;
-    case 'center':
+    case 'center': {
       const leftPad = Math.floor(padding / 2);
       const rightPad = padding - leftPad;
       return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
+    }
     default:
       return text + ' '.repeat(padding);
   }
@@ -236,7 +237,7 @@ export function formatTimestamp(
   date: Date = new Date(),
   format: string = 'HH:mm:ss'
 ): string {
-  const pad = (num: number) => num.toString().padStart(2, '0');
+  const pad = (num: number): string => num.toString().padStart(2, '0');
 
   const hours = pad(date.getHours());
   const minutes = pad(date.getMinutes());

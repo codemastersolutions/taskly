@@ -50,10 +50,7 @@ export class ProcessManager extends EventEmitter {
   /**
    * Spawn a new process for the given task
    */
-  async spawn(
-    task: TaskConfig,
-    options?: ProcessOptions
-  ): Promise<ProcessInfo> {
+  spawn(task: TaskConfig, options?: ProcessOptions): ProcessInfo {
     const identifier = task.identifier || this.generateIdentifier(task.command);
     const processOptions = { ...this.defaultOptions, ...options };
 
@@ -144,10 +141,7 @@ export class ProcessManager extends EventEmitter {
   /**
    * Terminate a specific process
    */
-  async terminate(
-    identifier: string,
-    signal: NodeJS.Signals = 'SIGTERM'
-  ): Promise<boolean> {
+  terminate(identifier: string, signal: NodeJS.Signals = 'SIGTERM'): boolean {
     const process = this.processes.get(identifier);
     const processInfo = this.processInfo.get(identifier);
 
@@ -196,12 +190,10 @@ export class ProcessManager extends EventEmitter {
   /**
    * Terminate all running processes
    */
-  async terminateAll(signal: NodeJS.Signals = 'SIGTERM'): Promise<void> {
-    const terminationPromises = Array.from(this.processes.keys()).map(
-      identifier => this.terminate(identifier, signal)
+  terminateAll(signal: NodeJS.Signals = 'SIGTERM'): void {
+    Array.from(this.processes.keys()).forEach(identifier =>
+      this.terminate(identifier, signal)
     );
-
-    await Promise.all(terminationPromises);
   }
 
   /**
@@ -394,7 +386,7 @@ export class ProcessManager extends EventEmitter {
    * Stream output to a writable stream with real-time formatting
    */
   streamOutput(identifier: string, outputStream: NodeJS.WritableStream): void {
-    const handleOutput = (id: string, outputLine: OutputLine) => {
+    const handleOutput = (id: string, outputLine: OutputLine): void => {
       if (id === identifier) {
         outputStream.write(outputLine.formatted + '\n');
       }
@@ -403,7 +395,7 @@ export class ProcessManager extends EventEmitter {
     this.on('process:output', handleOutput);
 
     // Clean up listener when process completes
-    const cleanup = () => {
+    const cleanup = (): void => {
       this.off('process:output', handleOutput);
     };
 
@@ -419,16 +411,16 @@ export class ProcessManager extends EventEmitter {
 
     const outputStream = new Readable({
       objectMode: false,
-      read() {}, // No-op, we'll push data as it comes
+      read(): void {}, // No-op, we'll push data as it comes
     });
 
-    const handleOutput = (id: string, outputLine: OutputLine) => {
+    const handleOutput = (id: string, outputLine: OutputLine): void => {
       if (id === identifier) {
         outputStream.push(outputLine.formatted + '\n');
       }
     };
 
-    const handleComplete = (id: string) => {
+    const handleComplete = (id: string): void => {
       if (id === identifier) {
         outputStream.push(null); // End the stream
       }
@@ -616,7 +608,7 @@ export class ProcessManager extends EventEmitter {
     }
 
     const monitorId = setInterval(() => {
-      this.checkResourceUsage(identifier, childProcess.pid!, options);
+      void this.checkResourceUsage(identifier, childProcess.pid!, options);
     }, 1000); // Check every second
 
     this.resourceMonitors.set(identifier, monitorId);
@@ -625,11 +617,11 @@ export class ProcessManager extends EventEmitter {
   /**
    * Check resource usage and enforce limits
    */
-  private async checkResourceUsage(
+  private checkResourceUsage(
     identifier: string,
     pid: number,
     options: ProcessOptions
-  ): Promise<void> {
+  ): void {
     try {
       // This is a simplified resource check
       // In a production environment, you might want to use more sophisticated monitoring
@@ -668,9 +660,9 @@ export class ProcessManager extends EventEmitter {
       return;
     }
 
-    const cleanup = async (signal: string) => {
+    const cleanup = (signal: string) => {
       this.emit('cleanup-signal', signal);
-      await this.cleanup();
+      this.cleanup();
       process.exit(0);
     };
 
@@ -680,16 +672,16 @@ export class ProcessManager extends EventEmitter {
     process.once('SIGHUP', () => cleanup('SIGHUP'));
 
     // Handle uncaught exceptions
-    process.once('uncaughtException', async error => {
+    process.once('uncaughtException', error => {
       this.emit('uncaught-exception', error);
-      await this.cleanup();
+      this.cleanup();
       process.exit(1);
     });
 
     // Handle unhandled promise rejections
-    process.once('unhandledRejection', async reason => {
+    process.once('unhandledRejection', reason => {
       this.emit('unhandled-rejection', reason);
-      await this.cleanup();
+      this.cleanup();
       process.exit(1);
     });
 
@@ -718,7 +710,7 @@ export class ProcessManager extends EventEmitter {
   /**
    * Clean up all resources
    */
-  async cleanup(): Promise<void> {
+  cleanup(): void {
     // Clear all timeouts and monitors
     for (const timeoutId of this.timeouts.values()) {
       clearTimeout(timeoutId);
@@ -728,7 +720,7 @@ export class ProcessManager extends EventEmitter {
     }
 
     // Terminate all processes
-    await this.terminateAll('SIGKILL');
+    this.terminateAll('SIGKILL');
 
     // Clear all maps
     this.processes.clear();

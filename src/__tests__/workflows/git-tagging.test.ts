@@ -132,7 +132,7 @@ describe('Git Tagging Script', () => {
         { current: '2.1.5', expected: '2.1.6' },
       ];
 
-      testCases.forEach(({ current, expected }) => {
+      testCases.forEach(({ current }) => {
         const mockPackageJson = { version: current };
         mockFs.readFileSync.mockReturnValue(JSON.stringify(mockPackageJson));
 

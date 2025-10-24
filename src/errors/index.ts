@@ -96,7 +96,7 @@ export class TasklyError extends Error {
   ) {
     super(message);
 
-    this.timestamp = context.timestamp || Date.now();
+    this.timestamp = context.timestamp ?? Date.now();
 
     // Maintain proper stack trace for where our error was thrown
     if (Error.captureStackTrace) {
@@ -361,12 +361,12 @@ export class ErrorFactory {
     switch (error.code) {
       case 'ENOENT':
         code = ERROR_CODES.FILE_SYSTEM_ERROR;
-        message = `File or directory not found: ${error.path || 'unknown'}`;
+        message = `File or directory not found: ${error.path ?? 'unknown'}`;
         break;
       case 'EACCES':
       case 'EPERM':
         code = ERROR_CODES.PERMISSION_DENIED;
-        message = `Permission denied: ${error.path || 'unknown'}`;
+        message = `Permission denied: ${error.path ?? 'unknown'}`;
         break;
       case 'EMFILE':
       case 'ENFILE':
@@ -375,11 +375,11 @@ export class ErrorFactory {
         break;
       case 'ENOTDIR':
         code = ERROR_CODES.FILE_SYSTEM_ERROR;
-        message = `Not a directory: ${error.path || 'unknown'}`;
+        message = `Not a directory: ${error.path ?? 'unknown'}`;
         break;
       case 'EISDIR':
         code = ERROR_CODES.FILE_SYSTEM_ERROR;
-        message = `Is a directory: ${error.path || 'unknown'}`;
+        message = `Is a directory: ${error.path ?? 'unknown'}`;
         break;
       default:
         code = ERROR_CODES.SYSTEM_ERROR;
@@ -513,10 +513,10 @@ export function isRecoverableError(error: TasklyError): boolean {
 export function getUserFriendlyMessage(error: TasklyError): string {
   switch (error.code) {
     case ERROR_CODES.PM_NOT_FOUND:
-      return `Package manager not found. Please install ${error.context.packageManager || 'the required package manager'}.`;
+      return `Package manager not found. Please install ${error.context.packageManager ?? 'the required package manager'}.`;
 
     case ERROR_CODES.SPAWN_FAILED:
-      return `Failed to run command "${error.context.command || 'unknown'}". Check if the command exists and is executable.`;
+      return `Failed to run command "${error.context.command ?? 'unknown'}". Check if the command exists and is executable.`;
 
     case ERROR_CODES.PERMISSION_DENIED:
       return `Permission denied. Check file permissions and try running with appropriate privileges.`;

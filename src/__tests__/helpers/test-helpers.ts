@@ -44,7 +44,7 @@ export const mockPath = {
   join: vi.fn((...args: string[]) => args.join('/')),
   resolve: vi.fn((...args: string[]) => args.join('/')),
   dirname: vi.fn((path: string) => path.split('/').slice(0, -1).join('/')),
-  basename: vi.fn((path: string) => path.split('/').pop() || ''),
+  basename: vi.fn((path: string) => path.split('/').pop() ?? ''),
   extname: vi.fn((path: string) => {
     const parts = path.split('.');
     return parts.length > 1 ? `.${parts.pop()}` : '';

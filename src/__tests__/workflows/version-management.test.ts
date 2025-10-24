@@ -230,7 +230,7 @@ describe('Version Management Script', () => {
       mockFs.writeFileSync.mockImplementation(() => {});
 
       // Mock the generateChangelogEntry function
-      const mockGenerateChangelogEntry = vi
+      const _mockGenerateChangelogEntry = vi
         .fn()
         .mockReturnValue('## 1.1.0\n\n### Features\n\n- add new feature\n');
 

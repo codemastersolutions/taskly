@@ -3,7 +3,6 @@
  * End-to-end testing of CLI functionality, cross-platform compatibility, and real command execution
  */
 
-import { exec } from 'child_process';
 import {
   chmodSync,
   existsSync,
@@ -14,14 +13,11 @@ import {
 } from 'fs';
 import { platform } from 'os';
 import { join, resolve } from 'path';
-import { promisify } from 'util';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TasklyCLI } from '../../cli/index.js';
 import { parseArgs } from '../../cli/parser.js';
 import { PackageManagerDetector } from '../../core/package-manager.js';
 import { TaskRunner } from '../../core/task-runner.js';
-
-const execAsync = promisify(exec);
 
 // Mock console methods to capture output
 const mockConsole = {
@@ -294,7 +290,7 @@ tasks:
   describe('task creation from CLI', () => {
     it('should create tasks from CLI commands', async () => {
       // Mock the task execution to avoid actual process spawning
-      const mockTaskRunner = {
+      const _mockTaskRunner = {
         execute: vi.fn().mockResolvedValue([
           {
             identifier: 'echo-0',
@@ -431,7 +427,7 @@ tasks:
       ).resolves.not.toThrow();
     });
 
-    it('should handle mixed long and short options', async () => {
+    it('should handle mixed long and short options', () => {
       // Test that argument parsing works correctly without actually executing tasks
       const { options } = parseArgs([
         '-kV',
@@ -705,7 +701,7 @@ tasks:
   });
 
   describe('Package Manager Integration', () => {
-    it('should detect available package managers', async () => {
+    it('should detect available package managers', () => {
       const detector = new PackageManagerDetector();
 
       // Test npm (should always be available in Node.js environment)
@@ -924,7 +920,7 @@ tasks:
 
       // Wait a bit then stop
       setTimeout(() => {
-        taskRunner.stop('SIGTERM');
+        void taskRunner.stop('SIGTERM');
       }, 100);
 
       const results = await executionPromise;

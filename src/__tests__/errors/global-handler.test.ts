@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   GlobalErrorHandler,
-  initializeGlobalErrorHandling,
-  handleGlobalError,
-  addGlobalShutdownCallback,
   LogLevel,
+  addGlobalShutdownCallback,
+  handleGlobalError,
+  initializeGlobalErrorHandling,
 } from '../../errors/global-handler.js';
-import { TasklyError, ERROR_CODES, ErrorSeverity } from '../../errors/index.js';
+import { ERROR_CODES, ErrorSeverity, TasklyError } from '../../errors/index.js';
 
 // Mock process methods
 const mockExit = vi
@@ -15,10 +15,10 @@ const mockExit = vi
 const mockConsoleError = vi
   .spyOn(console, 'error')
   .mockImplementation(() => {});
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+const _mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
 const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 const mockConsoleInfo = vi.spyOn(console, 'info').mockImplementation(() => {});
-const mockConsoleDebug = vi
+const _mockConsoleDebug = vi
   .spyOn(console, 'debug')
   .mockImplementation(() => {});
 
@@ -40,7 +40,7 @@ describe('GlobalErrorHandler', () => {
     });
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     if (handler) {
       handler.removeAllListeners();
     }
@@ -327,7 +327,7 @@ describe('GlobalErrorHandler', () => {
       handler.addShutdownCallback(callback2);
 
       // Mock graceful shutdown to avoid process.exit
-      const gracefulShutdownSpy = vi
+      const _gracefulShutdownSpy = vi
         .spyOn(handler, 'gracefulShutdown')
         .mockImplementation(async () => {
           // Execute callbacks manually for testing
@@ -360,7 +360,7 @@ describe('GlobalErrorHandler', () => {
       handler.addShutdownCallback(successCallback);
 
       // Mock the internal callback execution
-      const executeCallbacksSpy = vi
+      const _executeCallbacksSpy = vi
         .spyOn(handler as any, 'executeShutdownCallbacks')
         .mockImplementation(async () => {
           await Promise.all([
@@ -370,7 +370,7 @@ describe('GlobalErrorHandler', () => {
         });
 
       // Mock graceful shutdown to avoid process.exit
-      const gracefulShutdownSpy = vi
+      const _gracefulShutdownSpy = vi
         .spyOn(handler, 'gracefulShutdown')
         .mockImplementation(async () => {
           await (handler as any).executeShutdownCallbacks();

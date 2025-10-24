@@ -1,20 +1,20 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  TasklyError,
-  ValidationError,
+  CLIError,
+  ConfigurationError,
+  ERROR_CODES,
+  ErrorFactory,
+  ErrorSeverity,
   PackageManagerError,
   ProcessError,
-  TaskExecutionError,
-  ConfigurationError,
   SecurityError,
-  CLIError,
   SystemError,
-  ErrorFactory,
-  ERROR_CODES,
-  ErrorSeverity,
+  TaskExecutionError,
+  TasklyError,
+  ValidationError,
   getErrorSeverity,
-  isRecoverableError,
   getUserFriendlyMessage,
+  isRecoverableError,
 } from '../../errors/index.js';
 
 describe('Error Classes', () => {
