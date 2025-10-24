@@ -218,7 +218,7 @@ export const testData = {
       'refactor code structure',
     ];
 
-    return Array.from({ length: count }, (_, i) => {
+    return Array.from({ length: count }, () => {
       const type = types[Math.floor(Math.random() * types.length)];
       const scope =
         Math.random() > 0.5
@@ -322,7 +322,7 @@ export const workflowHelpers = {
         command,
         success: false,
         duration: Date.now() - startTime,
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   },

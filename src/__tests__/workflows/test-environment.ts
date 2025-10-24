@@ -132,7 +132,9 @@ export function validateTestEnvironment(): ValidationResult {
         warnings.push('package.json does not contain scripts');
       }
     } catch (error) {
-      errors.push(`Invalid package.json: ${error.message}`);
+      errors.push(
+        `Invalid package.json: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -279,7 +281,7 @@ export function validateWorkflowFiles(
       }
     } catch (error) {
       errors.push(
-        `Error reading workflow file ${path.basename(filePath)}: ${error.message}`
+        `Error reading workflow file ${path.basename(filePath)}: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   });
