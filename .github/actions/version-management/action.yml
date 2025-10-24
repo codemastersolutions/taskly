@@ -1,0 +1,104 @@
+name: 'Version Management'
+description: 'Analyze commits and manage semantic versioning automatically'
+author: 'Taskly Team'
+
+inputs:
+  dry-run:
+    description: 'Run analysis without modifying files'
+    required: false
+    default: 'false'
+  skip-update:
+    description: 'Skip updating version files (only analyze)'
+    required: false
+    default: 'false'
+  node-version:
+    description: 'Node.js version to use'
+    required: false
+    default: '18.x'
+
+outputs:
+  current-version:
+    description: 'Current version from package.json'
+    value: ${{ steps.version-analysis.outputs.current-version }}
+  new-version:
+    description: 'Calculated new version'
+    value: ${{ steps.version-analysis.outputs.new-version }}
+  increment-type:
+    description: 'Type of version increment (major/minor/patch)'
+    value: ${{ steps.version-analysis.outputs.increment-type }}
+  reason:
+    description: 'Reason for version increment'
+    value: ${{ steps.version-analysis.outputs.reason }}
+  commit-sha:
+    description: 'SHA of the commit that triggered the increment'
+    value: ${{ steps.version-analysis.outputs.commit-sha }}
+  has-changes:
+    description: 'Whether any changes were detected'
+    value: ${{ steps.version-analysis.outputs.has-changes }}
+  breaking-changes:
+    description: 'Whether breaking changes were detected'
+    value: ${{ steps.version-analysis.outputs.breaking-changes }}
+  features:
+    description: 'Whether new features were detected'
+    value: ${{ steps.version-analysis.outputs.features }}
+  fixes:
+    description: 'Whether bug fixes were detected'
+    value: ${{ steps.version-analysis.outputs.fixes }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: 'npm'
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci
+
+    - name: Build project for version analysis
+      shell: bash
+      run: npm run build:prod
+
+    - name: Analyze commits and manage version
+      id: version-analysis
+      shell: bash
+      run: |
+        # Prepare arguments
+        ARGS=""
+        if [ "${{ inputs.dry-run }}" = "true" ]; then
+          ARGS="$ARGS --dry-run"
+        fi
+        if [ "${{ inputs.skip-update }}" = "true" ]; then
+          ARGS="$ARGS --skip-update"
+        fi
+
+        # Run version management script
+        node scripts/version-management.js $ARGS
+
+    - name: Generate version summary
+      shell: bash
+      run: |
+        echo "## 📊 Version Management Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Current Version | \`${{ steps.version-analysis.outputs.current-version }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| New Version | \`${{ steps.version-analysis.outputs.new-version }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Increment Type | \`${{ steps.version-analysis.outputs.increment-type }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Reason | ${{ steps.version-analysis.outputs.reason }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Has Changes | ${{ steps.version-analysis.outputs.has-changes }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Breaking Changes | ${{ steps.version-analysis.outputs.breaking-changes }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Features | ${{ steps.version-analysis.outputs.features }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Fixes | ${{ steps.version-analysis.outputs.fixes }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        if [ "${{ inputs.dry-run }}" = "true" ]; then
+          echo "🔍 **Note:** This was a dry-run analysis. No files were modified." >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ inputs.skip-update }}" = "true" ]; then
+          echo "⏭️ **Note:** File updates were skipped. Only analysis was performed." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "✅ **Files Updated:** package.json, package-lock.json, CHANGELOG.md" >> $GITHUB_STEP_SUMMARY
+        fi

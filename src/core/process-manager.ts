@@ -1,16 +1,16 @@
-import { spawn, ChildProcess } from 'child_process';
+import { ChildProcess, spawn } from 'child_process';
 import { EventEmitter } from 'events';
-import { 
-  TaskConfig, 
-  TaskResult, 
-  ProcessInfo, 
-  TasklyError, 
-  ERROR_CODES,
-  OutputLine,
-  ErrorFactory,
-  SecurityError
-} from '../types/index.js';
 import { handleGlobalError } from '../errors/global-handler.js';
+import {
+  ERROR_CODES,
+  ErrorFactory,
+  OutputLine,
+  ProcessInfo,
+  SecurityError,
+  TaskConfig,
+  TaskResult,
+  TasklyError,
+} from '../types/index.js';
 
 /**
  * Process security and resource management options
@@ -39,34 +39,37 @@ export class ProcessManager extends EventEmitter {
   private outputBuffers: Map<string, string[]> = new Map();
   private timeouts: Map<string, NodeJS.Timeout> = new Map();
   private resourceMonitors: Map<string, NodeJS.Timeout> = new Map();
-  
+
   private defaultOptions: ProcessOptions = {
     timeout: 30000, // 30 seconds
     maxMemory: 512, // 512 MB
     maxCpu: 100, // 100%
-    killOnTimeout: true
+    killOnTimeout: true,
   };
 
   /**
    * Spawn a new process for the given task
    */
-  async spawn(task: TaskConfig, options?: ProcessOptions): Promise<ProcessInfo> {
+  async spawn(
+    task: TaskConfig,
+    options?: ProcessOptions
+  ): Promise<ProcessInfo> {
     const identifier = task.identifier || this.generateIdentifier(task.command);
     const processOptions = { ...this.defaultOptions, ...options };
-    
+
     try {
       // Validate and sanitize command
       this.validateCommand(task.command);
-      
+
       // Parse command and arguments
       const { command, args } = this.parseCommand(task.command);
-      
+
       // Create process info
       const processInfo: ProcessInfo = {
         identifier,
         command: task.command,
         startTime: Date.now(),
-        status: 'starting'
+        status: 'starting',
       };
 
       // Prepare environment variables
@@ -75,7 +78,7 @@ export class ProcessManager extends EventEmitter {
         ...processOptions.env,
         // Security: Remove potentially dangerous env vars
         NODE_OPTIONS: undefined,
-        LD_PRELOAD: undefined
+        LD_PRELOAD: undefined,
       };
 
       // Spawn the child process with security constraints
@@ -86,7 +89,7 @@ export class ProcessManager extends EventEmitter {
         env,
         // Security: Set resource limits if available
         detached: false,
-        windowsHide: true
+        windowsHide: true,
       });
 
       // Update process info with PID
@@ -112,7 +115,7 @@ export class ProcessManager extends EventEmitter {
       this.setupSignalHandlers();
 
       this.emit('process:start', processInfo);
-      
+
       return processInfo;
     } catch (error) {
       const tasklyError = ErrorFactory.fromSpawnError(
@@ -122,17 +125,17 @@ export class ProcessManager extends EventEmitter {
           taskId: identifier,
           cwd: processOptions.cwd || task.cwd,
           packageManager: task.packageManager,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         }
       );
-      
+
       // Handle error globally
       handleGlobalError(tasklyError, {
         context: 'process-spawn',
         taskId: identifier,
-        command: task.command
+        command: task.command,
       });
-      
+
       this.emit('process:error', identifier, tasklyError);
       throw tasklyError;
     }
@@ -141,7 +144,10 @@ export class ProcessManager extends EventEmitter {
   /**
    * Terminate a specific process
    */
-  async terminate(identifier: string, signal: NodeJS.Signals = 'SIGTERM'): Promise<boolean> {
+  async terminate(
+    identifier: string,
+    signal: NodeJS.Signals = 'SIGTERM'
+  ): Promise<boolean> {
     const process = this.processes.get(identifier);
     const processInfo = this.processInfo.get(identifier);
 
@@ -152,14 +158,14 @@ export class ProcessManager extends EventEmitter {
     try {
       // Update status
       processInfo.status = 'killed';
-      
+
       // Kill the process
       const killed = process.kill(signal);
-      
+
       if (killed) {
         this.emit('process:terminate', identifier, signal);
       }
-      
+
       return killed;
     } catch (error) {
       const tasklyError = ErrorFactory.createError(
@@ -171,17 +177,17 @@ export class ProcessManager extends EventEmitter {
           timestamp: Date.now(),
           metadata: {
             signal,
-            processStatus: processInfo?.status
-          }
+            processStatus: processInfo?.status,
+          },
         },
         error instanceof Error ? error : undefined
       );
-      
+
       handleGlobalError(tasklyError, {
         context: 'process-termination',
-        taskId: identifier
+        taskId: identifier,
       });
-      
+
       this.emit('process:error', identifier, tasklyError);
       return false;
     }
@@ -194,7 +200,7 @@ export class ProcessManager extends EventEmitter {
     const terminationPromises = Array.from(this.processes.keys()).map(
       identifier => this.terminate(identifier, signal)
     );
-    
+
     await Promise.all(terminationPromises);
   }
 
@@ -230,12 +236,15 @@ export class ProcessManager extends EventEmitter {
   /**
    * Parse command string into command and arguments
    */
-  private parseCommand(commandString: string): { command: string; args: string[] } {
+  private parseCommand(commandString: string): {
+    command: string;
+    args: string[];
+  } {
     // Simple command parsing - split by spaces but respect quotes
     const parts = commandString.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
     const command = parts[0] || '';
     const args = parts.slice(1).map(arg => arg.replace(/^"(.*)"$/, '$1'));
-    
+
     return { command, args };
   }
 
@@ -251,9 +260,12 @@ export class ProcessManager extends EventEmitter {
   /**
    * Set up stdout/stderr stream handlers with line buffering
    */
-  private setupStreamHandlers(identifier: string, childProcess: ChildProcess): void {
+  private setupStreamHandlers(
+    identifier: string,
+    childProcess: ChildProcess
+  ): void {
     const outputBuffer = this.outputBuffers.get(identifier)!;
-    
+
     // Line buffers for handling partial lines
     let stdoutBuffer = '';
     let stderrBuffer = '';
@@ -264,13 +276,14 @@ export class ProcessManager extends EventEmitter {
       childProcess.stdout.on('data', (data: string) => {
         stdoutBuffer += data;
         const lines = stdoutBuffer.split('\n');
-        
+
         // Keep the last incomplete line in buffer
         stdoutBuffer = lines.pop() || '';
-        
+
         // Process complete lines
         lines.forEach(line => {
-          if (line.length > 0) { // Include empty lines for formatting
+          if (line.length > 0) {
+            // Include empty lines for formatting
             this.processOutputLine(identifier, line, 'stdout', outputBuffer);
           }
         });
@@ -279,7 +292,12 @@ export class ProcessManager extends EventEmitter {
       // Handle any remaining buffer content when stream ends
       childProcess.stdout.on('end', () => {
         if (stdoutBuffer.trim()) {
-          this.processOutputLine(identifier, stdoutBuffer, 'stdout', outputBuffer);
+          this.processOutputLine(
+            identifier,
+            stdoutBuffer,
+            'stdout',
+            outputBuffer
+          );
         }
       });
     }
@@ -290,13 +308,14 @@ export class ProcessManager extends EventEmitter {
       childProcess.stderr.on('data', (data: string) => {
         stderrBuffer += data;
         const lines = stderrBuffer.split('\n');
-        
+
         // Keep the last incomplete line in buffer
         stderrBuffer = lines.pop() || '';
-        
+
         // Process complete lines
         lines.forEach(line => {
-          if (line.length > 0) { // Include empty lines for formatting
+          if (line.length > 0) {
+            // Include empty lines for formatting
             this.processOutputLine(identifier, line, 'stderr', outputBuffer);
           }
         });
@@ -305,7 +324,12 @@ export class ProcessManager extends EventEmitter {
       // Handle any remaining buffer content when stream ends
       childProcess.stderr.on('end', () => {
         if (stderrBuffer.trim()) {
-          this.processOutputLine(identifier, stderrBuffer, 'stderr', outputBuffer);
+          this.processOutputLine(
+            identifier,
+            stderrBuffer,
+            'stderr',
+            outputBuffer
+          );
         }
       });
     }
@@ -315,23 +339,23 @@ export class ProcessManager extends EventEmitter {
    * Process a single output line with formatting and prefixing
    */
   private processOutputLine(
-    identifier: string, 
-    content: string, 
+    identifier: string,
+    content: string,
     type: 'stdout' | 'stderr',
     outputBuffer: string[]
   ): void {
     // Store raw content in buffer
     outputBuffer.push(content);
-    
+
     // Create output line with basic formatting
     const outputLine: OutputLine = {
       identifier,
       content: content.trim(),
       type,
       timestamp: Date.now(),
-      formatted: this.formatOutputLine(identifier, content.trim(), type)
+      formatted: this.formatOutputLine(identifier, content.trim(), type),
     };
-    
+
     // Emit for real-time processing
     this.emit('process:output', identifier, outputLine);
   }
@@ -340,7 +364,11 @@ export class ProcessManager extends EventEmitter {
    * Format output line with identifier prefix
    * This provides basic formatting - ColorManager will enhance it with colors
    */
-  private formatOutputLine(identifier: string, content: string, type: 'stdout' | 'stderr'): string {
+  private formatOutputLine(
+    identifier: string,
+    content: string,
+    type: 'stdout' | 'stderr'
+  ): string {
     if (!content.trim()) {
       return '';
     }
@@ -348,7 +376,7 @@ export class ProcessManager extends EventEmitter {
     const timestamp = new Date().toISOString().substring(11, 23); // HH:mm:ss.SSS
     const prefix = `[${timestamp}] [${identifier}]`;
     const typeIndicator = type === 'stderr' ? ' [ERR]' : '';
-    
+
     return `${prefix}${typeIndicator} ${content}`;
   }
 
@@ -357,7 +385,9 @@ export class ProcessManager extends EventEmitter {
    */
   getFormattedOutput(identifier: string): string[] {
     const rawOutput = this.outputBuffers.get(identifier) || [];
-    return rawOutput.map(line => this.formatOutputLine(identifier, line, 'stdout'));
+    return rawOutput.map(line =>
+      this.formatOutputLine(identifier, line, 'stdout')
+    );
   }
 
   /**
@@ -386,10 +416,10 @@ export class ProcessManager extends EventEmitter {
    */
   getOutputStream(identifier: string): NodeJS.ReadableStream {
     const { Readable } = require('stream');
-    
+
     const outputStream = new Readable({
       objectMode: false,
-      read() {} // No-op, we'll push data as it comes
+      read() {}, // No-op, we'll push data as it comes
     });
 
     const handleOutput = (id: string, outputLine: OutputLine) => {
@@ -421,55 +451,61 @@ export class ProcessManager extends EventEmitter {
   /**
    * Set up process event handlers
    */
-  private setupProcessHandlers(identifier: string, childProcess: ChildProcess): void {
+  private setupProcessHandlers(
+    identifier: string,
+    childProcess: ChildProcess
+  ): void {
     const processInfo = this.processInfo.get(identifier)!;
     const outputBuffer = this.outputBuffers.get(identifier)!;
 
-    childProcess.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
-      const endTime = Date.now();
-      const duration = endTime - processInfo.startTime;
-      
-      // Update process status
-      if (signal) {
-        processInfo.status = 'killed';
-      } else if (code === 0) {
-        processInfo.status = 'completed';
-      } else {
-        processInfo.status = 'failed';
+    childProcess.on(
+      'close',
+      (code: number | null, signal: NodeJS.Signals | null) => {
+        const endTime = Date.now();
+        const duration = endTime - processInfo.startTime;
+
+        // Update process status
+        if (signal) {
+          processInfo.status = 'killed';
+        } else if (code === 0) {
+          processInfo.status = 'completed';
+        } else {
+          processInfo.status = 'failed';
+        }
+
+        // Create task result
+        const result: TaskResult = {
+          identifier,
+          exitCode: code || 0,
+          output: [...outputBuffer],
+          duration,
+          startTime: processInfo.startTime,
+          endTime,
+          error: code !== 0 ? `Process exited with code ${code}` : undefined,
+        };
+
+        // Clean up references and resources
+        this.processes.delete(identifier);
+        this.cleanupProcess(identifier);
+
+        this.emit('process:complete', identifier, result);
       }
-
-      // Create task result
-      const result: TaskResult = {
-        identifier,
-        exitCode: code || 0,
-        output: [...outputBuffer],
-        duration,
-        startTime: processInfo.startTime,
-        endTime,
-        error: code !== 0 ? `Process exited with code ${code}` : undefined
-      };
-
-      // Clean up references and resources
-      this.processes.delete(identifier);
-      this.cleanupProcess(identifier);
-      
-      this.emit('process:complete', identifier, result);
-    });
+    );
 
     childProcess.on('error', (error: Error) => {
       processInfo.status = 'failed';
-      
+
       const tasklyError = new TasklyError(
         `Process error for task "${identifier}": ${error.message}`,
         ERROR_CODES.SPAWN_FAILED,
-        identifier,
+        { taskId: identifier },
         error
       );
-      
+
       // Clean up references and resources
       this.processes.delete(identifier);
       this.cleanupProcess(identifier);
-      
+
       this.emit('process:error', identifier, tasklyError);
     });
   }
@@ -484,14 +520,17 @@ export class ProcessManager extends EventEmitter {
         ERROR_CODES.VALIDATION_ERROR,
         {
           command,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         }
       );
     }
 
     // Basic security checks
     const dangerousPatterns = [
-      { pattern: /rm\s+-rf\s+\//, description: 'recursive delete of root directory' },
+      {
+        pattern: /rm\s+-rf\s+\//,
+        description: 'recursive delete of root directory',
+      },
       { pattern: />\s*\/dev\//, description: 'redirect to system devices' },
       { pattern: /curl.*\|\s*sh/, description: 'curl pipe to shell execution' },
       { pattern: /wget.*\|\s*sh/, description: 'wget pipe to shell execution' },
@@ -511,18 +550,18 @@ export class ProcessManager extends EventEmitter {
             timestamp: Date.now(),
             metadata: {
               dangerousPattern: description,
-              detectedPattern: pattern.toString()
-            }
+              detectedPattern: pattern.toString(),
+            },
           }
         );
-        
+
         // Handle security violation globally
         handleGlobalError(securityError, {
           context: 'command-validation',
           securityViolation: true,
-          command
+          command,
         });
-        
+
         throw securityError;
       }
     }
@@ -532,8 +571,8 @@ export class ProcessManager extends EventEmitter {
    * Set up timeout control for a process
    */
   private setupTimeoutControl(
-    identifier: string, 
-    _childProcess: ChildProcess, 
+    identifier: string,
+    _childProcess: ChildProcess,
     options: ProcessOptions
   ): void {
     if (!options.timeout || options.timeout <= 0) {
@@ -544,14 +583,18 @@ export class ProcessManager extends EventEmitter {
       const processInfo = this.processInfo.get(identifier);
       if (processInfo && processInfo.status === 'running') {
         this.emit('process:timeout', identifier, options.timeout);
-        
+
         if (options.killOnTimeout) {
           this.terminate(identifier, 'SIGKILL').catch(error => {
-            this.emit('process:error', identifier, new TasklyError(
-              `Failed to kill process on timeout: ${error instanceof Error ? error.message : String(error)}`,
-              ERROR_CODES.SYSTEM_ERROR,
-              identifier
-            ));
+            this.emit(
+              'process:error',
+              identifier,
+              new TasklyError(
+                `Failed to kill process on timeout: ${error instanceof Error ? error.message : String(error)}`,
+                ERROR_CODES.SYSTEM_ERROR,
+                { taskId: identifier }
+              )
+            );
           });
         }
       }
@@ -564,8 +607,8 @@ export class ProcessManager extends EventEmitter {
    * Set up resource monitoring for a process
    */
   private setupResourceMonitoring(
-    identifier: string, 
-    childProcess: ChildProcess, 
+    identifier: string,
+    childProcess: ChildProcess,
     options: ProcessOptions
   ): void {
     if (!childProcess.pid || (!options.maxMemory && !options.maxCpu)) {
@@ -583,8 +626,8 @@ export class ProcessManager extends EventEmitter {
    * Check resource usage and enforce limits
    */
   private async checkResourceUsage(
-    identifier: string, 
-    pid: number, 
+    identifier: string,
+    pid: number,
     options: ProcessOptions
   ): Promise<void> {
     try {
@@ -607,10 +650,9 @@ export class ProcessManager extends EventEmitter {
         timestamp: Date.now(),
         limits: {
           maxMemory: options.maxMemory,
-          maxCpu: options.maxCpu
-        }
+          maxCpu: options.maxCpu,
+        },
       });
-
     } catch (error) {
       // Don't fail the process for monitoring errors, just log them
       this.emit('process:monitor-error', identifier, error);
@@ -638,14 +680,14 @@ export class ProcessManager extends EventEmitter {
     process.once('SIGHUP', () => cleanup('SIGHUP'));
 
     // Handle uncaught exceptions
-    process.once('uncaughtException', async (error) => {
+    process.once('uncaughtException', async error => {
       this.emit('uncaught-exception', error);
       await this.cleanup();
       process.exit(1);
     });
 
     // Handle unhandled promise rejections
-    process.once('unhandledRejection', async (reason) => {
+    process.once('unhandledRejection', async reason => {
       this.emit('unhandled-rejection', reason);
       await this.cleanup();
       process.exit(1);
@@ -687,14 +729,14 @@ export class ProcessManager extends EventEmitter {
 
     // Terminate all processes
     await this.terminateAll('SIGKILL');
-    
+
     // Clear all maps
     this.processes.clear();
     this.processInfo.clear();
     this.outputBuffers.clear();
     this.timeouts.clear();
     this.resourceMonitors.clear();
-    
+
     // Remove all listeners
     this.removeAllListeners();
   }

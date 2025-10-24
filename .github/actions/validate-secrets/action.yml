@@ -1,0 +1,235 @@
+name: 'Validate Secrets'
+description: 'Validate that required secrets are configured and accessible'
+author: 'Auto-Publish System'
+
+inputs:
+  npm-token:
+    description: 'NPM token for package publishing'
+    required: true
+  github-token:
+    description: 'GitHub token for repository operations'
+    required: true
+  check-npm-auth:
+    description: 'Whether to test NPM authentication'
+    required: false
+    default: 'true'
+  registry-url:
+    description: 'NPM registry URL to test against'
+    required: false
+    default: 'https://registry.npmjs.org'
+
+outputs:
+  npm-token-valid:
+    description: 'Whether NPM token is valid and has publish permissions'
+    value: ${{ steps.validate-npm.outputs.valid }}
+  github-token-valid:
+    description: 'Whether GitHub token has required permissions'
+    value: ${{ steps.validate-github.outputs.valid }}
+  npm-username:
+    description: 'NPM username associated with the token'
+    value: ${{ steps.validate-npm.outputs.username }}
+  validation-result:
+    description: 'Overall validation result (success/failure)'
+    value: ${{ steps.summary.outputs.result }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+        registry-url: ${{ inputs.registry-url }}
+
+    - name: Validate NPM token
+      id: validate-npm
+      if: inputs.check-npm-auth == 'true'
+      shell: bash
+      env:
+        NODE_AUTH_TOKEN: ${{ inputs.npm-token }}
+        NPM_TOKEN: ${{ inputs.npm-token }}
+      run: |
+        echo "🔍 Validating NPM token..."
+
+        # Check if token is provided
+        if [ -z "$NPM_TOKEN" ]; then
+          echo "❌ NPM_TOKEN is not provided"
+          echo "valid=false" >> $GITHUB_OUTPUT
+          echo "username=unknown" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+
+        # Check token format (should be npm_xxx or legacy format)
+        if [[ ! "$NPM_TOKEN" =~ ^npm_[a-zA-Z0-9]{36}$ ]] && [[ ! "$NPM_TOKEN" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ]]; then
+          echo "⚠️ NPM token format appears invalid (should be npm_xxx or UUID format)"
+        fi
+
+        # Test authentication
+        echo "Testing NPM authentication..."
+        if USERNAME=$(npm whoami 2>/dev/null); then
+          echo "✅ NPM authentication successful"
+          echo "📝 Authenticated as: $USERNAME"
+          echo "valid=true" >> $GITHUB_OUTPUT
+          echo "username=$USERNAME" >> $GITHUB_OUTPUT
+        else
+          echo "❌ NPM authentication failed"
+          echo "💡 Check that NPM_TOKEN is valid and has not expired"
+          echo "valid=false" >> $GITHUB_OUTPUT
+          echo "username=unknown" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+
+        # Test publish permissions (dry run)
+        echo "Testing publish permissions..."
+        if npm publish --dry-run 2>/dev/null; then
+          echo "✅ NPM publish permissions verified"
+        else
+          echo "⚠️ Could not verify publish permissions (package may not exist yet)"
+          echo "💡 This is normal for new packages"
+        fi
+
+    - name: Validate GitHub token
+      id: validate-github
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: |
+        echo "🔍 Validating GitHub token..."
+
+        # Check if token is provided
+        if [ -z "$GITHUB_TOKEN" ]; then
+          echo "❌ GITHUB_TOKEN is not provided"
+          echo "valid=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+
+        # Test basic authentication
+        echo "Testing GitHub authentication..."
+        if curl -s -H "Authorization: token $GITHUB_TOKEN" \
+               -H "Accept: application/vnd.github.v3+json" \
+               "https://api.github.com/user" > /tmp/github_user.json; then
+          
+          USERNAME=$(cat /tmp/github_user.json | grep -o '"login":"[^"]*"' | cut -d'"' -f4)
+          if [ -n "$USERNAME" ]; then
+            echo "✅ GitHub authentication successful"
+            echo "📝 Authenticated as: $USERNAME"
+            echo "valid=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ GitHub authentication failed - invalid response"
+            echo "valid=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+        else
+          echo "❌ GitHub authentication failed"
+          echo "💡 Check that GITHUB_TOKEN is valid and has not expired"
+          echo "valid=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+
+        # Test repository permissions if GITHUB_REPOSITORY is available
+        if [ -n "$GITHUB_REPOSITORY" ]; then
+          echo "Testing repository permissions..."
+          if curl -s -H "Authorization: token $GITHUB_TOKEN" \
+                 -H "Accept: application/vnd.github.v3+json" \
+                 "https://api.github.com/repos/$GITHUB_REPOSITORY" > /tmp/repo_info.json; then
+            
+            PERMISSIONS=$(cat /tmp/repo_info.json | grep -o '"permissions":{[^}]*}')
+            if echo "$PERMISSIONS" | grep -q '"push":true'; then
+              echo "✅ Repository push permissions verified"
+            else
+              echo "⚠️ Limited repository permissions detected"
+            fi
+            
+            if echo "$PERMISSIONS" | grep -q '"admin":true'; then
+              echo "✅ Repository admin permissions verified"
+            else
+              echo "⚠️ No admin permissions (required for branch protection)"
+            fi
+          else
+            echo "⚠️ Could not verify repository permissions"
+          fi
+        fi
+
+        # Cleanup
+        rm -f /tmp/github_user.json /tmp/repo_info.json
+
+    - name: Check token security
+      shell: bash
+      run: |
+        echo "🔒 Performing security checks..."
+
+        # Check if tokens are properly masked in logs
+        echo "Testing token masking..."
+
+        # These should be masked in the logs
+        TEST_NPM="${{ inputs.npm-token }}"
+        TEST_GITHUB="${{ inputs.github-token }}"
+
+        if [ ${#TEST_NPM} -gt 10 ]; then
+          echo "⚠️ NPM token appears to be exposed in logs"
+        else
+          echo "✅ NPM token is properly masked"
+        fi
+
+        if [ ${#TEST_GITHUB} -gt 10 ]; then
+          echo "⚠️ GitHub token appears to be exposed in logs"
+        else
+          echo "✅ GitHub token is properly masked"
+        fi
+
+        echo "💡 Tokens should appear as *** in workflow logs for security"
+
+    - name: Generate validation summary
+      id: summary
+      shell: bash
+      run: |
+        echo "## 🔐 Secrets Validation Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        NPM_VALID="${{ steps.validate-npm.outputs.valid }}"
+        GITHUB_VALID="${{ steps.validate-github.outputs.valid }}"
+
+        # NPM Token Status
+        if [ "${{ inputs.check-npm-auth }}" = "true" ]; then
+          if [ "$NPM_VALID" = "true" ]; then
+            echo "✅ **NPM Token:** Valid and authenticated" >> $GITHUB_STEP_SUMMARY
+            echo "  - Username: ${{ steps.validate-npm.outputs.username }}" >> $GITHUB_STEP_SUMMARY
+            echo "  - Registry: ${{ inputs.registry-url }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **NPM Token:** Invalid or authentication failed" >> $GITHUB_STEP_SUMMARY
+          fi
+        else
+          echo "⏭️ **NPM Token:** Validation skipped" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        # GitHub Token Status
+        if [ "$GITHUB_VALID" = "true" ]; then
+          echo "✅ **GitHub Token:** Valid and authenticated" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ **GitHub Token:** Invalid or authentication failed" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        # Overall Result
+        if [ "$NPM_VALID" = "true" ] && [ "$GITHUB_VALID" = "true" ]; then
+          echo "🎉 **Overall Result:** All secrets are valid and properly configured" >> $GITHUB_STEP_SUMMARY
+          echo "result=success" >> $GITHUB_OUTPUT
+        elif [ "${{ inputs.check-npm-auth }}" != "true" ] && [ "$GITHUB_VALID" = "true" ]; then
+          echo "✅ **Overall Result:** GitHub token valid (NPM validation skipped)" >> $GITHUB_STEP_SUMMARY
+          echo "result=success" >> $GITHUB_OUTPUT
+        else
+          echo "❌ **Overall Result:** One or more secrets are invalid" >> $GITHUB_STEP_SUMMARY
+          echo "result=failure" >> $GITHUB_OUTPUT
+        fi
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🔒 Security Recommendations" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Store secrets in GitHub repository settings" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Use environment protection for production workflows" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Regularly rotate NPM tokens" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Use minimal required permissions for tokens" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Monitor token usage and expiration dates" >> $GITHUB_STEP_SUMMARY

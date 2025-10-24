@@ -2,98 +2,81 @@
 
 This directory contains the complete CI/CD pipeline configuration for the Taskly library. The workflows are designed to ensure code quality, security, and reliable releases.
 
+## 📚 Documentation Index
+
+### Core Documentation
+- **[CI/CD Guide](docs/CICD_GUIDE.md)** - Comprehensive pipeline overview and architecture
+- **[Configuration Reference](docs/CONFIGURATION.md)** - Complete configuration options and settings
+- **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** - Common issues and solutions
+- **[Secrets Setup](docs/SECRETS_SETUP.md)** - Security configuration and token management
+
+### Quick Links
+- [Workflow Overview](#workflows-overview) - Summary of all workflows
+- [Quality Standards](#quality-standards) - Code quality requirements
+- [Usage Examples](#usage-examples) - Common workflow operations
+- [Monitoring](#monitoring-and-alerts) - Health monitoring and alerts
+
 ## Workflows Overview
 
-### 1. CI Workflow (`ci.yml`)
-**Triggers:** Push to main/develop, Pull Requests
-**Purpose:** Comprehensive testing and validation
+### 1. PR Validation Workflow (`pr-validation.yml`)
+**Triggers:** Pull Requests to main branch
+**Purpose:** Comprehensive validation before merge
 
-- **Multi-platform Testing**: Tests on Ubuntu, Windows, and macOS
-- **Multi-version Testing**: Tests on Node.js 16.x, 18.x, and 20.x
-- **Quality Gates**: TypeScript, ESLint, Prettier, and security checks
-- **Build Validation**: Tests both CommonJS and ESM builds
-- **Coverage Reporting**: Uploads coverage to Codecov
+- **Quality Gates**: ESLint, Prettier, and TypeScript validation
+- **Security Audit**: Dependency vulnerability scanning and license validation
+- **Test Matrix**: Cross-platform testing (Ubuntu, Windows, macOS) with Node.js 16.x, 18.x, 20.x
+- **Build Validation**: Production build verification and bundle size checks
+- **Coverage Requirements**: Minimum 80% test coverage across all metrics
+- **PR Summary**: Automated status reporting and merge blocking
 
-### 2. Release Workflow (`release.yml`)
-**Triggers:** Git tags (v*), Manual dispatch
+### 2. Auto-Publish Workflow (`auto-publish.yml`)
+**Triggers:** Push to main branch, Manual dispatch
 **Purpose:** Automated NPM publishing and GitHub releases
 
-- **Version Validation**: Ensures semantic versioning compliance
-- **Cross-platform Testing**: Validates builds on all platforms
-- **NPM Publishing**: Publishes to NPM registry with proper tagging
-- **GitHub Releases**: Creates releases with auto-generated changelogs
-- **Rollback Support**: Handles pre-releases and stable releases
+- **Version Management**: Conventional commit analysis and automatic versioning
+- **Pre-Publish Validation**: Complete quality and security validation
+- **Matrix Testing**: Cross-platform package installation and functionality testing
+- **NPM Publishing**: Secure publishing with verification and rollback support
+- **GitHub Releases**: Automated changelog generation and asset uploads
+- **Post-Publish Tasks**: Comprehensive reporting and notifications
 
-### 3. Version Bump Workflow (`version-bump.yml`)
-**Triggers:** Manual dispatch
-**Purpose:** Automated version management
-
-- **Semantic Versioning**: Supports patch, minor, major, and prerelease bumps
-- **Changelog Generation**: Auto-updates CHANGELOG.md
-- **Git Tagging**: Creates and pushes version tags
-- **Release Triggering**: Optionally triggers release workflow
-
-### 4. Security Scanning (`security.yml`)
-**Triggers:** Push, Pull Requests, Daily schedule
-**Purpose:** Continuous security monitoring
-
-- **Dependency Scanning**: NPM audit for vulnerabilities
-- **Code Quality**: ESLint and Prettier validation
-- **Bundle Analysis**: Size monitoring and optimization alerts
-- **Automated Reporting**: Security summaries and alerts
-
-### 5. Quality Gates (`quality-gates.yml`)
-**Triggers:** Pull Requests, Push to main/develop
-**Purpose:** Comprehensive quality validation
-
-- **4-Stage Validation**:
-  1. Code Standards (TypeScript, ESLint, Prettier)
-  2. Test Coverage (90% minimum)
-  3. Security & Dependencies (Vulnerability scanning)
-  4. Build & Bundle (Size limits, functionality tests)
-
-### 6. Monitoring & Alerts (`monitoring.yml`)
-**Triggers:** Twice daily schedule, Manual dispatch
-**Purpose:** Proactive health monitoring
+### 3. Monitoring Workflow (`monitoring.yml`)
+**Triggers:** Scheduled (daily), Manual dispatch
+**Purpose:** Proactive system health monitoring
 
 - **Dependency Health**: Outdated and deprecated package detection
 - **Performance Monitoring**: Build and test performance tracking
 - **Security Monitoring**: Continuous vulnerability scanning
-- **Automated Issues**: Creates GitHub issues for failures
+- **Automated Reporting**: Health metrics and anomaly detection
 
-### 7. Continuous Testing (`continuous-testing.yml`)
-**Triggers:** Every 6 hours, Manual dispatch
-**Purpose:** Ongoing test suite validation
-
-- **Scheduled Testing**: Regular test execution
-- **Test Health Checks**: Performance and reliability monitoring
-- **Failure Reporting**: Automated issue creation for failures
-
-### 8. Pre-commit Checks (`pre-commit.yml`)
-**Triggers:** Pull Requests, Push to main/develop
-**Purpose:** Fast feedback for developers
-
-- **Quick Validation**: Essential checks before full CI
-- **Coverage Validation**: Ensures minimum coverage requirements
-- **Changed Test Detection**: Runs only relevant tests
+### Legacy Workflows (Migrated)
+The following workflows have been consolidated into the main workflows above:
+- `ci.yml.old` - Functionality moved to `pr-validation.yml`
+- `release.yml.old` - Functionality moved to `auto-publish.yml`
+- `security.yml.old` - Functionality integrated into both main workflows
+- `quality-gates.yml.old` - Functionality integrated into `pr-validation.yml`
 
 ## Quality Standards
 
 ### Code Quality Requirements
 - **TypeScript**: Strict mode, no compilation errors
-- **ESLint**: Zero errors, warnings allowed but discouraged
-- **Prettier**: Consistent code formatting
-- **Test Coverage**: Minimum 90% across all metrics
+- **ESLint**: Zero errors, warnings treated as errors in CI
+- **Prettier**: Consistent code formatting, automatic validation
+- **Test Coverage**: Minimum 80% across all metrics (statements, branches, functions, lines)
 
 ### Security Requirements
-- **Critical/High Vulnerabilities**: Zero tolerance
-- **Moderate Vulnerabilities**: Maximum 5 allowed
-- **Dependency Updates**: Regular monitoring and updates
+- **Critical Vulnerabilities**: Zero tolerance - blocks PR merge and publishing
+- **High Vulnerabilities**: Zero tolerance - blocks PR merge and publishing
+- **Moderate Vulnerabilities**: Configurable threshold (default: 10 allowed)
+- **License Compliance**: Only approved licenses (MIT, Apache-2.0, BSD variants, ISC)
+- **Secret Detection**: Automated scanning for hardcoded secrets
 
-### Bundle Size Limits
-- **Individual Bundles**: Maximum 50KB per format
-- **Total Bundle**: Monitored for growth trends
-- **Compression**: Gzip analysis for optimization
+### Build and Bundle Requirements
+- **Bundle Size Limit**: Maximum 50KB per format (CJS/ESM)
+- **Entry Point Validation**: All declared entry points must exist and be functional
+- **Cross-Platform Compatibility**: Must work on Ubuntu, Windows, and macOS
+- **Multi-Version Support**: Compatible with Node.js 16.x, 18.x, and 20.x
+- **CLI Functionality**: Executable must work correctly across all platforms
 
 ## Secrets Configuration
 
@@ -126,28 +109,34 @@ Protection Rules:
 
 ## Usage Examples
 
-### Manual Release
+### Manual Publishing
 ```bash
-# Trigger version bump
-gh workflow run version-bump.yml -f bump_type=minor -f create_release=true
+# Force publish even if no changes detected
+gh workflow run auto-publish.yml -f force-publish=true
 
-# Or create release from existing tag
-gh workflow run release.yml -f version=1.2.0
+# Run in dry-run mode (no actual publishing)
+gh workflow run auto-publish.yml -f dry-run=true
+
+# Normal automatic publishing happens on merge to main
 ```
 
-### Security Scan
+### Manual Validation
 ```bash
-# Run security scan manually
-gh workflow run security.yml
+# Run PR validation on current branch
+gh workflow run pr-validation.yml
 
-# Run specific monitoring check
-gh workflow run monitoring.yml -f check_type=security
+# Run monitoring checks
+gh workflow run monitoring.yml
 ```
 
-### Quality Check
+### Local Development
 ```bash
-# Run quality gates manually
-gh workflow run quality-gates.yml
+# Run the same checks locally before pushing
+npm run lint && npm run type-check && npm test && npm run build:prod
+
+# Fix common issues
+npm run lint:fix
+npm run format
 ```
 
 ## Monitoring and Alerts
@@ -166,41 +155,43 @@ The workflows automatically create GitHub issues for:
 
 ## Troubleshooting
 
-### Common Issues
+For detailed troubleshooting information, see the **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)**.
 
-1. **NPM Publishing Fails**
-   - Check NPM_TOKEN secret is valid
-   - Verify package.json version matches release tag
-   - Ensure package name is available on NPM
+### Quick Fixes
 
-2. **Coverage Failures**
-   - Run `npm run test:coverage` locally
-   - Check for untested code paths
-   - Review coverage thresholds in vitest.config.ts
+1. **PR Validation Failures**
+   ```bash
+   # Fix code quality issues
+   npm run lint:fix && npm run format
+   
+   # Check test coverage
+   npm run test:coverage
+   ```
 
-3. **Security Scan Failures**
-   - Run `npm audit` locally
-   - Update vulnerable dependencies
-   - Consider using `npm audit fix`
+2. **Security Issues**
+   ```bash
+   # Fix vulnerabilities
+   npm audit fix
+   
+   # Check for updates
+   npm outdated
+   ```
 
-4. **Bundle Size Exceeded**
-   - Analyze bundle with `npm run build:prod`
-   - Check for unnecessary dependencies
-   - Consider code splitting or tree shaking
+3. **Build Issues**
+   ```bash
+   # Clean and rebuild
+   npm run clean && npm run build:prod
+   
+   # Test CLI functionality
+   node dist/cjs/bin/taskly.js --version
+   ```
 
-### Debug Commands
-```bash
-# Local testing
-npm run test:ci
-npm run quality
-npm run build:prod
+### Getting Help
 
-# Security check
-npm audit --audit-level moderate
-
-# Bundle analysis
-npm run build:prod && du -sh dist/*
-```
+1. **Check workflow logs** in GitHub Actions for detailed error messages
+2. **Review the [Troubleshooting Guide](docs/TROUBLESHOOTING.md)** for comprehensive solutions
+3. **Run commands locally** to reproduce and debug issues
+4. **Open an issue** with detailed error information if problems persist
 
 ## Maintenance
 

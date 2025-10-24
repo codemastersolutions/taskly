@@ -1,0 +1,227 @@
+name: 'Send Notification'
+description: 'Send notifications to external services (Slack, Discord, Teams, Email)'
+author: 'CodeMaster Solutions'
+
+inputs:
+  notification-type:
+    description: 'Type of notification (workflow, publication, security, metrics-anomaly)'
+    required: true
+
+  data-file:
+    description: 'Path to JSON file containing notification data'
+    required: false
+    default: ''
+
+  data-json:
+    description: 'JSON string containing notification data (alternative to data-file)'
+    required: false
+    default: ''
+
+  slack-webhook:
+    description: 'Slack webhook URL (overrides environment variable)'
+    required: false
+    default: ''
+
+  discord-webhook:
+    description: 'Discord webhook URL (overrides environment variable)'
+    required: false
+    default: ''
+
+  teams-webhook:
+    description: 'Microsoft Teams webhook URL (overrides environment variable)'
+    required: false
+    default: ''
+
+  enabled-services:
+    description: 'Comma-separated list of services to notify (slack,discord,teams,email)'
+    required: false
+    default: 'slack'
+
+  on-failure-only:
+    description: 'Only send notifications on failure'
+    required: false
+    default: 'false'
+
+  on-success-only:
+    description: 'Only send notifications on success'
+    required: false
+    default: 'false'
+
+outputs:
+  notification-sent:
+    description: 'Whether notifications were sent successfully'
+    value: ${{ steps.notify.outputs.success }}
+
+  services-notified:
+    description: 'List of services that were notified'
+    value: ${{ steps.notify.outputs.services }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+
+    - name: Prepare notification data
+      id: prepare
+      shell: bash
+      run: |
+        NOTIFICATION_TYPE="${{ inputs.notification-type }}"
+
+        # Create base notification data
+        cat > base-notification.json << EOF
+        {
+          "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)",
+          "workflowName": "${{ github.workflow }}",
+          "runId": "${{ github.run_id }}",
+          "runNumber": "${{ github.run_number }}",
+          "actor": "${{ github.actor }}",
+          "event": "${{ github.event_name }}",
+          "ref": "${{ github.ref }}",
+          "sha": "${{ github.sha }}",
+          "repository": "${{ github.repository }}",
+          "workflowUrl": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+          "branch": "${{ github.ref_name }}"
+        }
+        EOF
+
+        # Merge with provided data
+        if [ -n "${{ inputs.data-json }}" ]; then
+          echo '${{ inputs.data-json }}' > provided-data.json
+          node -e "
+            const base = JSON.parse(require('fs').readFileSync('base-notification.json', 'utf8'));
+            const provided = JSON.parse(require('fs').readFileSync('provided-data.json', 'utf8'));
+            const merged = { ...base, ...provided };
+            require('fs').writeFileSync('merged-notification.json', JSON.stringify(merged, null, 2));
+          "
+          echo "data-file=merged-notification.json" >> $GITHUB_OUTPUT
+        elif [ -n "${{ inputs.data-file }}" ]; then
+          node -e "
+            const base = JSON.parse(require('fs').readFileSync('base-notification.json', 'utf8'));
+            const provided = JSON.parse(require('fs').readFileSync('${{ inputs.data-file }}', 'utf8'));
+            const merged = { ...base, ...provided };
+            require('fs').writeFileSync('merged-notification.json', JSON.stringify(merged, null, 2));
+          "
+          echo "data-file=merged-notification.json" >> $GITHUB_OUTPUT
+        else
+          echo "data-file=base-notification.json" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Check notification conditions
+      id: check-conditions
+      shell: bash
+      run: |
+        DATA_FILE="${{ steps.prepare.outputs.data-file }}"
+
+        # Read the status from data file
+        STATUS=$(node -e "
+          const data = JSON.parse(require('fs').readFileSync('$DATA_FILE', 'utf8'));
+          console.log(data.status || 'unknown');
+        ")
+
+        SHOULD_NOTIFY="true"
+
+        # Check failure-only condition
+        if [ "${{ inputs.on-failure-only }}" = "true" ] && [ "$STATUS" != "failure" ] && [ "$STATUS" != "cancelled" ]; then
+          SHOULD_NOTIFY="false"
+          echo "Skipping notification - on-failure-only is true but status is $STATUS"
+        fi
+
+        # Check success-only condition
+        if [ "${{ inputs.on-success-only }}" = "true" ] && [ "$STATUS" != "success" ]; then
+          SHOULD_NOTIFY="false"
+          echo "Skipping notification - on-success-only is true but status is $STATUS"
+        fi
+
+        echo "should-notify=$SHOULD_NOTIFY" >> $GITHUB_OUTPUT
+        echo "status=$STATUS" >> $GITHUB_OUTPUT
+
+    - name: Setup notification configuration
+      if: steps.check-conditions.outputs.should-notify == 'true'
+      shell: bash
+      run: |
+        # Create notification config file
+        cat > .github/notification-config.json << EOF
+        {
+          "slack": {
+            "enabled": $(echo "${{ inputs.enabled-services }}" | grep -q "slack" && echo "true" || echo "false"),
+            "webhookUrl": "${{ inputs.slack-webhook || env.SLACK_WEBHOOK_URL }}"
+          },
+          "discord": {
+            "enabled": $(echo "${{ inputs.enabled-services }}" | grep -q "discord" && echo "true" || echo "false"),
+            "webhookUrl": "${{ inputs.discord-webhook || env.DISCORD_WEBHOOK_URL }}"
+          },
+          "teams": {
+            "enabled": $(echo "${{ inputs.enabled-services }}" | grep -q "teams" && echo "true" || echo "false"),
+            "webhookUrl": "${{ inputs.teams-webhook || env.TEAMS_WEBHOOK_URL }}"
+          },
+          "email": {
+            "enabled": $(echo "${{ inputs.enabled-services }}" | grep -q "email" && echo "true" || echo "false")
+          }
+        }
+        EOF
+
+    - name: Send notifications
+      id: notify
+      if: steps.check-conditions.outputs.should-notify == 'true'
+      shell: bash
+      run: |
+        DATA_FILE="${{ steps.prepare.outputs.data-file }}"
+        NOTIFICATION_TYPE="${{ inputs.notification-type }}"
+
+        echo "Sending $NOTIFICATION_TYPE notification..."
+
+        # Send the notification
+        if node ${{ github.action_path }}/../../scripts/notification-system.js "$NOTIFICATION_TYPE" "$DATA_FILE"; then
+          echo "success=true" >> $GITHUB_OUTPUT
+          echo "services=${{ inputs.enabled-services }}" >> $GITHUB_OUTPUT
+          echo "✅ Notifications sent successfully"
+        else
+          echo "success=false" >> $GITHUB_OUTPUT
+          echo "services=" >> $GITHUB_OUTPUT
+          echo "❌ Failed to send notifications"
+          
+          # Don't fail the workflow for notification failures unless explicitly requested
+          if [ "${{ env.FAIL_ON_NOTIFICATION_ERROR }}" = "true" ]; then
+            exit 1
+          else
+            echo "⚠️ Continuing workflow despite notification failure"
+          fi
+        fi
+
+    - name: Log notification result
+      if: always()
+      shell: bash
+      run: |
+        if [ "${{ steps.check-conditions.outputs.should-notify }}" = "true" ]; then
+          if [ "${{ steps.notify.outputs.success }}" = "true" ]; then
+            echo "## 📢 Notification Sent" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- **Type:** ${{ inputs.notification-type }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Services:** ${{ steps.notify.outputs.services }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Status:** ${{ steps.check-conditions.outputs.status }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Timestamp:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ❌ Notification Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- **Type:** ${{ inputs.notification-type }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Services:** ${{ inputs.enabled-services }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Error:** Check logs for details" >> $GITHUB_STEP_SUMMARY
+          fi
+        else
+          echo "## ⏭️ Notification Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Reason:** Conditions not met" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ${{ steps.check-conditions.outputs.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **On Failure Only:** ${{ inputs.on-failure-only }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **On Success Only:** ${{ inputs.on-success-only }}" >> $GITHUB_STEP_SUMMARY
+        fi
+
+    - name: Cleanup temporary files
+      if: always()
+      shell: bash
+      run: |
+        rm -f base-notification.json provided-data.json merged-notification.json
+        rm -f .github/notification-config.json

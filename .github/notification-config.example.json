@@ -1,0 +1,59 @@
+{
+  "slack": {
+    "enabled": true,
+    "webhookUrl": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK",
+    "channel": "#ci-cd",
+    "username": "GitHub Actions Bot",
+    "iconEmoji": ":robot_face:",
+    "notifyOn": ["failure", "success", "publication", "security"]
+  },
+  "discord": {
+    "enabled": false,
+    "webhookUrl": "https://discord.com/api/webhooks/YOUR/DISCORD/WEBHOOK",
+    "username": "GitHub Actions",
+    "notifyOn": ["failure", "publication", "security"]
+  },
+  "teams": {
+    "enabled": false,
+    "webhookUrl": "https://outlook.office.com/webhook/YOUR/TEAMS/WEBHOOK",
+    "notifyOn": ["failure", "publication", "security"]
+  },
+  "email": {
+    "enabled": false,
+    "smtpHost": "smtp.gmail.com",
+    "smtpPort": 587,
+    "smtpUser": "your-email@gmail.com",
+    "smtpPass": "your-app-password",
+    "fromEmail": "ci-cd@yourcompany.com",
+    "toEmails": [
+      "team-lead@yourcompany.com",
+      "devops@yourcompany.com"
+    ],
+    "notifyOn": ["failure", "security"]
+  },
+  "thresholds": {
+    "bundleSizeIncrease": 20,
+    "workflowDurationIncrease": 50,
+    "testCoverageDecrease": 5,
+    "securityVulnerabilities": {
+      "critical": 0,
+      "high": 2,
+      "moderate": 10
+    }
+  },
+  "schedules": {
+    "dailySummary": {
+      "enabled": true,
+      "time": "09:00",
+      "timezone": "UTC",
+      "services": ["slack", "email"]
+    },
+    "weeklySummary": {
+      "enabled": true,
+      "day": "monday",
+      "time": "09:00",
+      "timezone": "UTC",
+      "services": ["email"]
+    }
+  }
+}

@@ -1,0 +1,152 @@
+name: 'Quality Check'
+description: 'Run code quality checks including lint, format, and type-check'
+inputs:
+  fail-on-warnings:
+    description: 'Fail the action if warnings are found'
+    required: false
+    default: 'true'
+  eslint-config:
+    description: 'ESLint configuration file path'
+    required: false
+    default: '.eslintrc.json'
+  prettier-config:
+    description: 'Prettier configuration file path'
+    required: false
+    default: '.prettierrc.json'
+
+outputs:
+  lint-result:
+    description: 'ESLint check result'
+    value: ${{ steps.lint.outputs.result }}
+  format-result:
+    description: 'Prettier check result'
+    value: ${{ steps.format.outputs.result }}
+  typecheck-result:
+    description: 'TypeScript check result'
+    value: ${{ steps.typecheck.outputs.result }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run ESLint
+      id: lint
+      shell: bash
+      run: |
+        echo "Running ESLint with error on warnings..."
+
+        # Run ESLint with JSON output for detailed reporting
+        if npm run lint:check --silent > eslint-output.txt 2>&1; then
+          echo "result=success" >> $GITHUB_OUTPUT
+          echo "✅ ESLint passed - no errors or warnings"
+        else
+          echo "result=failure" >> $GITHUB_OUTPUT
+          echo "❌ ESLint failed - errors or warnings found"
+          
+          # Show the output for debugging
+          echo "ESLint output:"
+          cat eslint-output.txt
+          
+          if [ "${{ inputs.fail-on-warnings }}" = "true" ]; then
+            exit 1
+          fi
+        fi
+
+    - name: Run Prettier Check
+      id: format
+      shell: bash
+      run: |
+        echo "Running Prettier check..."
+        if npm run format:check 2>&1 | tee prettier-output.txt; then
+          echo "result=success" >> $GITHUB_OUTPUT
+          echo "✅ Prettier check passed"
+        else
+          echo "result=failure" >> $GITHUB_OUTPUT
+          echo "❌ Prettier check failed"
+          echo "Run 'npm run format' to fix formatting issues"
+          if [ "${{ inputs.fail-on-warnings }}" = "true" ]; then
+            exit 1
+          fi
+        fi
+
+    - name: Run TypeScript Check
+      id: typecheck
+      shell: bash
+      run: |
+        echo "Running TypeScript type check..."
+        if npm run type-check 2>&1 | tee typecheck-output.txt; then
+          echo "result=success" >> $GITHUB_OUTPUT
+          echo "✅ TypeScript check passed"
+        else
+          echo "result=failure" >> $GITHUB_OUTPUT
+          echo "❌ TypeScript check failed"
+          if [ "${{ inputs.fail-on-warnings }}" = "true" ]; then
+            exit 1
+          fi
+        fi
+
+    - name: Generate Quality Report
+      shell: bash
+      run: |
+        echo "## 📊 Code Quality Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Generated at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Check | Status | Details |" >> $GITHUB_STEP_SUMMARY
+        echo "|-------|--------|---------|" >> $GITHUB_STEP_SUMMARY
+
+        if [ "${{ steps.lint.outputs.result }}" = "success" ]; then
+          echo "| ESLint | ✅ Passed | No linting errors or warnings |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| ESLint | ❌ Failed | Linting errors/warnings found |" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        if [ "${{ steps.format.outputs.result }}" = "success" ]; then
+          echo "| Prettier | ✅ Passed | Code formatting is correct |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| Prettier | ❌ Failed | Code formatting issues detected |" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        if [ "${{ steps.typecheck.outputs.result }}" = "success" ]; then
+          echo "| TypeScript | ✅ Passed | No type errors found |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| TypeScript | ❌ Failed | Type errors detected |" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        # Overall quality status
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ steps.lint.outputs.result }}" = "success" ] && \
+           [ "${{ steps.format.outputs.result }}" = "success" ] && \
+           [ "${{ steps.typecheck.outputs.result }}" = "success" ]; then
+          echo "### ✅ All Quality Checks Passed!" >> $GITHUB_STEP_SUMMARY
+          echo "Code meets all quality standards and is ready for review." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### ❌ Quality Issues Found" >> $GITHUB_STEP_SUMMARY
+          echo "Please address the issues above before proceeding." >> $GITHUB_STEP_SUMMARY
+        fi
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📝 Detailed Output" >> $GITHUB_STEP_SUMMARY
+
+        if [ -f "eslint-output.txt" ] && [ -s "eslint-output.txt" ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### ESLint Output" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          head -50 eslint-output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        fi
+
+        if [ -f "prettier-output.txt" ] && [ -s "prettier-output.txt" ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Prettier Output" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          head -30 prettier-output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        fi
+
+        if [ -f "typecheck-output.txt" ] && [ -s "typecheck-output.txt" ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### TypeScript Output" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          head -30 typecheck-output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        fi

@@ -1,0 +1,663 @@
+name: 'Security Audit'
+description: 'Run security audit with detailed reporting'
+inputs:
+  audit-level:
+    description: 'Minimum severity level to report (low, moderate, high, critical)'
+    required: false
+    default: 'moderate'
+  fail-on-vulnerabilities:
+    description: 'Fail the action if vulnerabilities are found'
+    required: false
+    default: 'true'
+  check-outdated:
+    description: 'Check for outdated dependencies'
+    required: false
+    default: 'true'
+  generate-report:
+    description: 'Generate detailed security report'
+    required: false
+    default: 'true'
+  critical-threshold:
+    description: 'Maximum allowed critical vulnerabilities'
+    required: false
+    default: '0'
+  high-threshold:
+    description: 'Maximum allowed high vulnerabilities'
+    required: false
+    default: '0'
+  moderate-threshold:
+    description: 'Maximum allowed moderate vulnerabilities'
+    required: false
+    default: '5'
+  check-licenses:
+    description: 'Check dependency licenses for compatibility'
+    required: false
+    default: 'true'
+  allowed-licenses:
+    description: 'Comma-separated list of allowed license types'
+    required: false
+    default: 'MIT,Apache-2.0,BSD-2-Clause,BSD-3-Clause,ISC,0BSD,Unlicense'
+  check-secrets:
+    description: 'Scan code for hardcoded secrets'
+    required: false
+    default: 'true'
+  secrets-patterns:
+    description: 'Additional regex patterns to check for secrets (JSON array)'
+    required: false
+    default: '[]'
+
+outputs:
+  vulnerabilities-found:
+    description: 'Total number of vulnerabilities found'
+    value: ${{ steps.audit.outputs.vulnerabilities }}
+  critical-count:
+    description: 'Number of critical vulnerabilities'
+    value: ${{ steps.audit.outputs.critical }}
+  high-count:
+    description: 'Number of high vulnerabilities'
+    value: ${{ steps.audit.outputs.high }}
+  moderate-count:
+    description: 'Number of moderate vulnerabilities'
+    value: ${{ steps.audit.outputs.moderate }}
+  audit-result:
+    description: 'Security audit result'
+    value: ${{ steps.audit.outputs.result }}
+  outdated-count:
+    description: 'Number of outdated packages'
+    value: ${{ steps.outdated.outputs.count }}
+  license-issues:
+    description: 'Number of license compatibility issues'
+    value: ${{ steps.licenses.outputs.issues }}
+  secrets-found:
+    description: 'Number of potential hardcoded secrets found'
+    value: ${{ steps.secrets.outputs.found }}
+  security-score:
+    description: 'Overall security score (0-100)'
+    value: ${{ steps.summary.outputs.score }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run npm audit
+      id: audit
+      shell: bash
+      run: |
+        echo "Running npm security audit with configurable thresholds..."
+
+        # Run audit and capture output (always run full audit regardless of level)
+        npm audit --json > audit-report.json 2>&1 || true
+
+        if [ -f "audit-report.json" ]; then
+          # Parse vulnerability counts by severity
+          node -e "
+            try {
+              const data = JSON.parse(require('fs').readFileSync('audit-report.json', 'utf8'));
+              const vulns = data.metadata?.vulnerabilities || {};
+              
+              const critical = vulns.critical || 0;
+              const high = vulns.high || 0;
+              const moderate = vulns.moderate || 0;
+              const low = vulns.low || 0;
+              const info = vulns.info || 0;
+              const total = critical + high + moderate + low + info;
+              
+              console.log('CRITICAL=' + critical);
+              console.log('HIGH=' + high);
+              console.log('MODERATE=' + moderate);
+              console.log('LOW=' + low);
+              console.log('INFO=' + info);
+              console.log('TOTAL=' + total);
+              
+              // Check against thresholds
+              const criticalThreshold = ${{ inputs.critical-threshold }};
+              const highThreshold = ${{ inputs.high-threshold }};
+              const moderateThreshold = ${{ inputs.moderate-threshold }};
+              
+              console.log('Vulnerability counts:');
+              console.log('- Critical: ' + critical + ' (threshold: ' + criticalThreshold + ')');
+              console.log('- High: ' + high + ' (threshold: ' + highThreshold + ')');
+              console.log('- Moderate: ' + moderate + ' (threshold: ' + moderateThreshold + ')');
+              console.log('- Low: ' + low);
+              console.log('- Info: ' + info);
+              console.log('- Total: ' + total);
+              
+              if (critical > criticalThreshold || high > highThreshold || moderate > moderateThreshold) {
+                console.log('THRESHOLD_EXCEEDED=true');
+                process.exit(1);
+              } else {
+                console.log('THRESHOLD_EXCEEDED=false');
+              }
+            } catch(e) {
+              console.log('CRITICAL=0');
+              console.log('HIGH=0');
+              console.log('MODERATE=0');
+              console.log('LOW=0');
+              console.log('INFO=0');
+              console.log('TOTAL=0');
+              console.log('THRESHOLD_EXCEEDED=false');
+              console.log('Error parsing audit report:', e.message);
+            }
+          " > audit-results.txt
+          
+          # Source the results
+          source audit-results.txt
+          
+          # Set outputs
+          echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
+          echo "high=$HIGH" >> $GITHUB_OUTPUT
+          echo "moderate=$MODERATE" >> $GITHUB_OUTPUT
+          echo "vulnerabilities=$TOTAL" >> $GITHUB_OUTPUT
+          
+          if [ "$THRESHOLD_EXCEEDED" = "true" ]; then
+            echo "result=failure" >> $GITHUB_OUTPUT
+            echo "❌ Security audit failed - vulnerability thresholds exceeded"
+            
+            # Show detailed audit output
+            echo "Detailed audit results:"
+            npm audit --audit-level=low || true
+            
+            if [ "${{ inputs.fail-on-vulnerabilities }}" = "true" ]; then
+              exit 1
+            fi
+          else
+            echo "result=success" >> $GITHUB_OUTPUT
+            echo "✅ Security audit passed - all vulnerability counts within thresholds"
+          fi
+        else
+          echo "critical=unknown" >> $GITHUB_OUTPUT
+          echo "high=unknown" >> $GITHUB_OUTPUT
+          echo "moderate=unknown" >> $GITHUB_OUTPUT
+          echo "vulnerabilities=unknown" >> $GITHUB_OUTPUT
+          echo "result=error" >> $GITHUB_OUTPUT
+          echo "❌ Failed to run security audit - no report generated"
+          
+          if [ "${{ inputs.fail-on-vulnerabilities }}" = "true" ]; then
+            exit 1
+          fi
+        fi
+
+    - name: Check outdated dependencies
+      id: outdated
+      if: inputs.check-outdated == 'true'
+      shell: bash
+      run: |
+        echo "Checking for outdated dependencies..."
+
+        if npm outdated --json > outdated-report.json 2>&1; then
+          echo "count=0" >> $GITHUB_OUTPUT
+          echo "✅ All dependencies are up to date"
+        else
+          if [ -f "outdated-report.json" ]; then
+            # Use node to parse JSON as jq might not be available
+            OUTDATED_COUNT=$(node -e "
+              try {
+                const data = JSON.parse(require('fs').readFileSync('outdated-report.json', 'utf8'));
+                console.log(Object.keys(data).length || 0);
+              } catch(e) {
+                console.log('0');
+              }
+            " 2>/dev/null || echo "0")
+            echo "count=$OUTDATED_COUNT" >> $GITHUB_OUTPUT
+            echo "⚠️ Found $OUTDATED_COUNT outdated dependencies"
+            
+            # Show outdated packages
+            npm outdated || true
+          else
+            echo "count=unknown" >> $GITHUB_OUTPUT
+            echo "⚠️ Could not check outdated dependencies"
+          fi
+        fi
+
+    - name: Check dependency licenses
+      id: licenses
+      if: inputs.check-licenses == 'true'
+      shell: bash
+      run: |
+        echo "🔍 Checking dependency licenses..."
+
+        # Install license-checker if not available
+        if ! command -v license-checker &> /dev/null; then
+          echo "Installing license-checker..."
+          npm install -g license-checker
+        fi
+
+        # Generate license report
+        license-checker --json --production > licenses.json 2>/dev/null || true
+
+        if [ -f "licenses.json" ]; then
+          # Parse allowed licenses
+          ALLOWED_LICENSES="${{ inputs.allowed-licenses }}"
+          
+          # Check for license compatibility issues
+          node -e "
+            try {
+              const licenses = JSON.parse(require('fs').readFileSync('licenses.json', 'utf8'));
+              const allowedLicenses = '$ALLOWED_LICENSES'.split(',').map(l => l.trim());
+              
+              let issues = 0;
+              let problematicPackages = [];
+              
+              console.log('📋 License Analysis Results:');
+              console.log('');
+              
+              for (const [pkg, info] of Object.entries(licenses)) {
+                const license = info.licenses || 'Unknown';
+                const isAllowed = allowedLicenses.some(allowed => 
+                  license.toLowerCase().includes(allowed.toLowerCase()) ||
+                  allowed.toLowerCase() === 'unknown' && license === 'Unknown'
+                );
+                
+                if (!isAllowed && license !== 'UNLICENSED') {
+                  issues++;
+                  problematicPackages.push({ package: pkg, license: license });
+                  console.log('❌ ' + pkg + ': ' + license + ' (not allowed)');
+                } else if (license === 'Unknown' || license === 'UNLICENSED') {
+                  console.log('⚠️ ' + pkg + ': ' + license + ' (needs review)');
+                } else {
+                  console.log('✅ ' + pkg + ': ' + license);
+                }
+              }
+              
+              console.log('');
+              console.log('Summary:');
+              console.log('- Total packages: ' + Object.keys(licenses).length);
+              console.log('- License issues: ' + issues);
+              console.log('- Allowed licenses: ' + allowedLicenses.join(', '));
+              
+              // Save problematic packages for reporting
+              require('fs').writeFileSync('license-issues.json', JSON.stringify(problematicPackages, null, 2));
+              
+              console.log('ISSUES=' + issues);
+            } catch(e) {
+              console.log('Error analyzing licenses:', e.message);
+              console.log('ISSUES=0');
+            }
+          " > license-results.txt
+          
+          # Extract results
+          ISSUES=$(grep "ISSUES=" license-results.txt | cut -d'=' -f2 || echo "0")
+          echo "issues=$ISSUES" >> $GITHUB_OUTPUT
+          
+          if [ "$ISSUES" -gt "0" ]; then
+            echo "⚠️ Found $ISSUES license compatibility issues"
+          else
+            echo "✅ All licenses are compatible"
+          fi
+        else
+          echo "issues=unknown" >> $GITHUB_OUTPUT
+          echo "⚠️ Could not analyze licenses"
+        fi
+
+    - name: Scan for hardcoded secrets
+      id: secrets
+      if: inputs.check-secrets == 'true'
+      shell: bash
+      run: |
+        echo "🔍 Scanning for hardcoded secrets..."
+
+        # Define common secret patterns
+        cat > secret-patterns.txt << 'EOF'
+        # API Keys and Tokens
+        [aA][pP][iI]_?[kK][eE][yY].*['\"][0-9a-zA-Z]{32,45}['\"]
+        [aA][cC][cC][eE][sS][sS]_?[tT][oO][kK][eE][nN].*['\"][0-9a-zA-Z]{32,45}['\"]
+        [sS][eE][cC][rR][eE][tT]_?[kK][eE][yY].*['\"][0-9a-zA-Z]{32,45}['\"]
+
+        # AWS Keys
+        AKIA[0-9A-Z]{16}
+        [aA][wW][sS].*['\"][0-9a-zA-Z/+=]{40}['\"]
+
+        # GitHub Tokens
+        ghp_[0-9a-zA-Z]{36}
+        gho_[0-9a-zA-Z]{36}
+        ghu_[0-9a-zA-Z]{36}
+        ghs_[0-9a-zA-Z]{36}
+        ghr_[0-9a-zA-Z]{36}
+
+        # NPM Tokens
+        npm_[0-9a-zA-Z]{36}
+
+        # Generic patterns
+        [pP][aA][sS][sS][wW][oO][rR][dD].*['\"][^'\"]{8,}['\"]
+        [tT][oO][kK][eE][nN].*['\"][0-9a-zA-Z]{20,}['\"]
+
+        # Database URLs
+        mongodb://[^\\s]*:[^\\s]*@[^\\s]*
+        postgres://[^\\s]*:[^\\s]*@[^\\s]*
+        mysql://[^\\s]*:[^\\s]*@[^\\s]*
+
+        # Private keys
+        -----BEGIN [A-Z ]*PRIVATE KEY-----
+        EOF
+
+        # Add custom patterns if provided
+        CUSTOM_PATTERNS='${{ inputs.secrets-patterns }}'
+        if [ "$CUSTOM_PATTERNS" != "[]" ] && [ -n "$CUSTOM_PATTERNS" ]; then
+          echo "$CUSTOM_PATTERNS" | node -e "
+            const patterns = JSON.parse(require('fs').readFileSync('/dev/stdin', 'utf8'));
+            patterns.forEach(pattern => console.log(pattern));
+          " >> secret-patterns.txt 2>/dev/null || true
+        fi
+
+        # Scan source files (excluding node_modules, .git, dist)
+        FOUND=0
+        FINDINGS_FILE="secret-findings.txt"
+        > "$FINDINGS_FILE"
+
+        echo "Scanning source files for secrets..."
+
+        # Find source files to scan
+        find . -type f \( -name "*.js" -o -name "*.ts" -o -name "*.json" -o -name "*.yml" -o -name "*.yaml" -o -name "*.env*" \) \
+          -not -path "./node_modules/*" \
+          -not -path "./.git/*" \
+          -not -path "./dist/*" \
+          -not -path "./coverage/*" \
+          -not -path "./.github/actions/*/node_modules/*" > files-to-scan.txt
+
+        # Scan each file
+        while IFS= read -r file; do
+          if [ -f "$file" ]; then
+            while IFS= read -r pattern; do
+              # Skip empty lines and comments
+              if [[ "$pattern" =~ ^[[:space:]]*$ ]] || [[ "$pattern" =~ ^[[:space:]]*# ]]; then
+                continue
+              fi
+              
+              # Search for pattern in file
+              if grep -n -E "$pattern" "$file" > /dev/null 2>&1; then
+                echo "⚠️ Potential secret found in $file" | tee -a "$FINDINGS_FILE"
+                grep -n -E "$pattern" "$file" | head -3 | sed 's/^/  /' | tee -a "$FINDINGS_FILE"
+                FOUND=$((FOUND + 1))
+              fi
+            done < secret-patterns.txt
+          fi
+        done < files-to-scan.txt
+
+        echo "found=$FOUND" >> $GITHUB_OUTPUT
+
+        if [ "$FOUND" -gt "0" ]; then
+          echo "⚠️ Found $FOUND potential hardcoded secrets"
+          echo "Please review the findings and remove any actual secrets"
+        else
+          echo "✅ No hardcoded secrets detected"
+        fi
+
+        # Clean up
+        rm -f secret-patterns.txt files-to-scan.txt
+
+    - name: Calculate security score
+      id: summary
+      shell: bash
+      run: |
+        echo "📊 Calculating overall security score..."
+
+        # Initialize score (start with 100)
+        SCORE=100
+
+        # Deduct points for vulnerabilities
+        CRITICAL="${{ steps.audit.outputs.critical }}"
+        HIGH="${{ steps.audit.outputs.high }}"
+        MODERATE="${{ steps.audit.outputs.moderate }}"
+
+        if [ "$CRITICAL" != "unknown" ] && [ "$CRITICAL" -gt "0" ]; then
+          SCORE=$((SCORE - CRITICAL * 25))  # -25 points per critical
+        fi
+
+        if [ "$HIGH" != "unknown" ] && [ "$HIGH" -gt "0" ]; then
+          SCORE=$((SCORE - HIGH * 15))      # -15 points per high
+        fi
+
+        if [ "$MODERATE" != "unknown" ] && [ "$MODERATE" -gt "0" ]; then
+          SCORE=$((SCORE - MODERATE * 5))   # -5 points per moderate
+        fi
+
+        # Deduct points for outdated dependencies
+        OUTDATED="${{ steps.outdated.outputs.count }}"
+        if [ "$OUTDATED" != "unknown" ] && [ "$OUTDATED" != "0" ] && [ "$OUTDATED" -gt "0" ]; then
+          DEDUCTION=$((OUTDATED > 10 ? 10 : OUTDATED))  # Max 10 points deduction
+          SCORE=$((SCORE - DEDUCTION))
+        fi
+
+        # Deduct points for license issues
+        LICENSE_ISSUES="${{ steps.licenses.outputs.issues }}"
+        if [ "$LICENSE_ISSUES" != "unknown" ] && [ "$LICENSE_ISSUES" -gt "0" ]; then
+          SCORE=$((SCORE - LICENSE_ISSUES * 3))  # -3 points per license issue
+        fi
+
+        # Deduct points for potential secrets
+        SECRETS="${{ steps.secrets.outputs.found }}"
+        if [ "$SECRETS" != "unknown" ] && [ "$SECRETS" -gt "0" ]; then
+          SCORE=$((SCORE - SECRETS * 10))  # -10 points per potential secret
+        fi
+
+        # Ensure score doesn't go below 0
+        if [ "$SCORE" -lt "0" ]; then
+          SCORE=0
+        fi
+
+        echo "score=$SCORE" >> $GITHUB_OUTPUT
+        echo "📊 Security Score: $SCORE/100"
+
+        # Determine grade
+        if [ "$SCORE" -ge "90" ]; then
+          echo "grade=A" >> $GITHUB_OUTPUT
+          echo "🏆 Security Grade: A (Excellent)"
+        elif [ "$SCORE" -ge "80" ]; then
+          echo "grade=B" >> $GITHUB_OUTPUT
+          echo "🥈 Security Grade: B (Good)"
+        elif [ "$SCORE" -ge "70" ]; then
+          echo "grade=C" >> $GITHUB_OUTPUT
+          echo "🥉 Security Grade: C (Fair)"
+        elif [ "$SCORE" -ge "60" ]; then
+          echo "grade=D" >> $GITHUB_OUTPUT
+          echo "⚠️ Security Grade: D (Poor)"
+        else
+          echo "grade=F" >> $GITHUB_OUTPUT
+          echo "❌ Security Grade: F (Critical)"
+        fi
+
+    - name: Generate Security Report
+      if: inputs.generate-report == 'true'
+      shell: bash
+      run: |
+        echo "## 🔒 Security Audit Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Generated at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        # Security Score
+        SCORE="${{ steps.summary.outputs.score }}"
+        GRADE="${{ steps.summary.outputs.grade }}"
+        echo "### 📊 Security Score: $SCORE/100 (Grade: $GRADE)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        if [ "$SCORE" -ge "80" ]; then
+          echo "🎉 **Excellent security posture!** Your project follows security best practices." >> $GITHUB_STEP_SUMMARY
+        elif [ "$SCORE" -ge "60" ]; then
+          echo "⚠️ **Good security, but room for improvement.** Consider addressing the issues below." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "🚨 **Security concerns detected.** Please address the critical issues immediately." >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        # Vulnerability Summary Table
+        echo "### 🛡️ Vulnerability Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Severity | Count | Threshold | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|----------|-------|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+
+        CRITICAL="${{ steps.audit.outputs.critical }}"
+        HIGH="${{ steps.audit.outputs.high }}"
+        MODERATE="${{ steps.audit.outputs.moderate }}"
+
+        # Critical vulnerabilities
+        if [ "$CRITICAL" != "unknown" ]; then
+          if [ "$CRITICAL" -le "${{ inputs.critical-threshold }}" ]; then
+            echo "| Critical | $CRITICAL | ${{ inputs.critical-threshold }} | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Critical | $CRITICAL | ${{ inputs.critical-threshold }} | ❌ Fail |" >> $GITHUB_STEP_SUMMARY
+          fi
+        else
+          echo "| Critical | Unknown | ${{ inputs.critical-threshold }} | ⚠️ Error |" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        # High vulnerabilities
+        if [ "$HIGH" != "unknown" ]; then
+          if [ "$HIGH" -le "${{ inputs.high-threshold }}" ]; then
+            echo "| High | $HIGH | ${{ inputs.high-threshold }} | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| High | $HIGH | ${{ inputs.high-threshold }} | ❌ Fail |" >> $GITHUB_STEP_SUMMARY
+          fi
+        else
+          echo "| High | Unknown | ${{ inputs.high-threshold }} | ⚠️ Error |" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        # Moderate vulnerabilities
+        if [ "$MODERATE" != "unknown" ]; then
+          if [ "$MODERATE" -le "${{ inputs.moderate-threshold }}" ]; then
+            echo "| Moderate | $MODERATE | ${{ inputs.moderate-threshold }} | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Moderate | $MODERATE | ${{ inputs.moderate-threshold }} | ❌ Fail |" >> $GITHUB_STEP_SUMMARY
+          fi
+        else
+          echo "| Moderate | Unknown | ${{ inputs.moderate-threshold }} | ⚠️ Error |" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        # Overall audit status
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ steps.audit.outputs.result }}" = "success" ]; then
+          echo "### ✅ Security Audit Passed" >> $GITHUB_STEP_SUMMARY
+          echo "All vulnerability counts are within acceptable thresholds." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### ❌ Security Audit Failed" >> $GITHUB_STEP_SUMMARY
+          echo "One or more vulnerability thresholds have been exceeded." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Action Required:** Address the security vulnerabilities before proceeding." >> $GITHUB_STEP_SUMMARY
+        fi
+
+        # Outdated Dependencies
+        if [ "${{ inputs.check-outdated }}" = "true" ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Dependency Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.outdated.outputs.count }}" = "0" ]; then
+            echo "✅ **All dependencies are up to date**" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.outdated.outputs.count }}" = "unknown" ]; then
+            echo "⚠️ **Could not check outdated dependencies**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **${{ steps.outdated.outputs.count }} outdated dependencies found**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Consider updating dependencies for better security and performance." >> $GITHUB_STEP_SUMMARY
+          fi
+        fi
+
+        # License Compatibility
+        if [ "${{ inputs.check-licenses }}" = "true" ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📄 License Compatibility" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          LICENSE_ISSUES="${{ steps.licenses.outputs.issues }}"
+          if [ "$LICENSE_ISSUES" = "0" ]; then
+            echo "✅ **All dependency licenses are compatible**" >> $GITHUB_STEP_SUMMARY
+            echo "Allowed licenses: ${{ inputs.allowed-licenses }}" >> $GITHUB_STEP_SUMMARY
+          elif [ "$LICENSE_ISSUES" = "unknown" ]; then
+            echo "⚠️ **Could not analyze dependency licenses**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **$LICENSE_ISSUES license compatibility issues found**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Action Required:** Review and resolve license compatibility issues." >> $GITHUB_STEP_SUMMARY
+            echo "Allowed licenses: ${{ inputs.allowed-licenses }}" >> $GITHUB_STEP_SUMMARY
+            
+            if [ -f "license-issues.json" ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "#### Problematic Licenses" >> $GITHUB_STEP_SUMMARY
+              echo '```json' >> $GITHUB_STEP_SUMMARY
+              cat license-issues.json >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+        fi
+
+        # Hardcoded Secrets
+        if [ "${{ inputs.check-secrets }}" = "true" ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔐 Hardcoded Secrets Scan" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          SECRETS_FOUND="${{ steps.secrets.outputs.found }}"
+          if [ "$SECRETS_FOUND" = "0" ]; then
+            echo "✅ **No hardcoded secrets detected**" >> $GITHUB_STEP_SUMMARY
+          elif [ "$SECRETS_FOUND" = "unknown" ]; then
+            echo "⚠️ **Could not scan for hardcoded secrets**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "🚨 **$SECRETS_FOUND potential hardcoded secrets found**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Critical Action Required:** Review and remove any actual secrets from the codebase." >> $GITHUB_STEP_SUMMARY
+            echo "Use environment variables or secure secret management instead." >> $GITHUB_STEP_SUMMARY
+            
+            if [ -f "secret-findings.txt" ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "#### Potential Secrets Found" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              head -20 secret-findings.txt >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+        fi
+
+        # Detailed vulnerability information
+        if [ "${{ steps.audit.outputs.result }}" != "success" ] && [ -f "audit-report.json" ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔍 Vulnerability Details" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Show top vulnerabilities
+          node -e "
+            try {
+              const data = JSON.parse(require('fs').readFileSync('audit-report.json', 'utf8'));
+              const advisories = data.advisories || {};
+              
+              console.log('#### Top Security Issues');
+              console.log('');
+              
+              let count = 0;
+              for (const [id, advisory] of Object.entries(advisories)) {
+                if (count >= 5) break; // Limit to top 5
+                
+                console.log('**' + advisory.title + '**');
+                console.log('- Severity: ' + advisory.severity);
+                console.log('- Module: ' + advisory.module_name);
+                console.log('- Vulnerable versions: ' + advisory.vulnerable_versions);
+                console.log('- Patched versions: ' + advisory.patched_versions);
+                console.log('- More info: ' + advisory.url);
+                console.log('');
+                count++;
+              }
+              
+              if (Object.keys(advisories).length > 5) {
+                console.log('_... and ' + (Object.keys(advisories).length - 5) + ' more vulnerabilities_');
+              }
+            } catch(e) {
+              console.log('Could not parse vulnerability details');
+            }
+          " >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "Could not parse vulnerability details" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "---" >> $GITHUB_STEP_SUMMARY
+        echo "_Security audit completed with thresholds: Critical ≤ ${{ inputs.critical-threshold }}, High ≤ ${{ inputs.high-threshold }}, Moderate ≤ ${{ inputs.moderate-threshold }}_" >> $GITHUB_STEP_SUMMARY
+
+    - name: Upload Security Reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: security-reports-${{ github.run_number }}
+        path: |
+          audit-report.json
+          outdated-report.json
+          licenses.json
+          license-issues.json
+          secret-findings.txt
+          license-results.txt
+        retention-days: 30

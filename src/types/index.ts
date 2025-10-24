@@ -2,15 +2,28 @@
  * Core type definitions for Taskly library
  */
 
+import type { TasklyError } from '../errors/index.js';
+
 // Package Manager Types
 export type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
 
 // Color Types
-export type Color = 
-  | 'red' | 'green' | 'yellow' | 'blue' | 'magenta' | 'cyan'
-  | 'brightRed' | 'brightGreen' | 'brightYellow' | 'brightBlue'
-  | 'brightMagenta' | 'brightCyan'
-  | 'white' | 'black' | 'gray';
+export type Color =
+  | 'red'
+  | 'green'
+  | 'yellow'
+  | 'blue'
+  | 'magenta'
+  | 'cyan'
+  | 'brightRed'
+  | 'brightGreen'
+  | 'brightYellow'
+  | 'brightBlue'
+  | 'brightMagenta'
+  | 'brightCyan'
+  | 'white'
+  | 'black'
+  | 'gray';
 
 // Core Task Configuration Interface
 export interface TaskConfig {
@@ -85,27 +98,27 @@ export interface CLIOptions {
 }
 
 // Re-export error types from the dedicated errors module
-export type { 
-  ErrorCode, 
-  ErrorContext, 
-  ErrorSeverity 
+export type {
+  ErrorCode,
+  ErrorContext,
+  ErrorSeverity,
 } from '../errors/index.js';
 
-export { 
+export {
+  CLIError,
+  ConfigurationError,
   ERROR_CODES,
-  TasklyError,
-  ValidationError,
+  ErrorFactory,
   PackageManagerError,
   ProcessError,
-  TaskExecutionError,
-  ConfigurationError,
   SecurityError,
-  CLIError,
   SystemError,
-  ErrorFactory,
+  TaskExecutionError,
+  TasklyError,
+  ValidationError,
   getErrorSeverity,
+  getUserFriendlyMessage,
   isRecoverableError,
-  getUserFriendlyMessage
 } from '../errors/index.js';
 
 // Process Management Types
@@ -122,7 +135,12 @@ export interface ProcessInfo {
   status: ProcessStatus;
 }
 
-export type ProcessStatus = 'starting' | 'running' | 'completed' | 'failed' | 'killed';
+export type ProcessStatus =
+  | 'starting'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'killed';
 
 // Color Management Types
 export interface ColorAssignment {
@@ -175,7 +193,7 @@ export interface OutputLine {
 }
 
 // Event Types for Task Lifecycle
-export type TaskEvent = 
+export type TaskEvent =
   | { type: 'task:start'; identifier: string; command: string }
   | { type: 'task:output'; identifier: string; line: OutputLine }
   | { type: 'task:complete'; identifier: string; result: TaskResult }
@@ -191,6 +209,8 @@ export type DeepPartial<T> = {
 export type RequiredKeys<T, K extends keyof T> = T & Required<Pick<T, K>>;
 
 // Re-export commonly used types
-export type { TaskConfig as Task };
-export type { TaskResult as Result };
-export type { TasklyOptions as Options };
+export type {
+  TasklyOptions as Options,
+  TaskResult as Result,
+  TaskConfig as Task,
+};

@@ -1,0 +1,140 @@
+name: 'Setup Branch Protection'
+description: 'Configure branch protection rules for the main branch'
+author: 'Auto-Publish System'
+
+inputs:
+  github-token:
+    description: 'GitHub token with admin repository access'
+    required: true
+  repository:
+    description: 'Repository in format owner/repo'
+    required: false
+    default: ${{ github.repository }}
+  validate-only:
+    description: 'Only validate existing protection, do not modify'
+    required: false
+    default: 'false'
+
+outputs:
+  protection-configured:
+    description: 'Whether branch protection was successfully configured'
+    value: ${{ steps.setup.outputs.configured }}
+  validation-result:
+    description: 'Result of branch protection validation'
+    value: ${{ steps.validate.outputs.result }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        cd ${{ github.action_path }}
+        if [ ! -f package.json ]; then
+          npm init -y
+          npm install @octokit/rest
+        fi
+
+    - name: Setup branch protection
+      id: setup
+      if: inputs.validate-only != 'true'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITHUB_REPOSITORY: ${{ inputs.repository }}
+      run: |
+        echo "🔒 Configuring branch protection rules..."
+
+        cd ${{ github.action_path }}
+
+        # Copy the script to current directory if it doesn't exist
+        if [ ! -f setup-branch-protection.js ]; then
+          cp ${{ github.workspace }}/.github/scripts/setup-branch-protection.js .
+        fi
+
+        if node setup-branch-protection.js setup; then
+          echo "configured=true" >> $GITHUB_OUTPUT
+          echo "✅ Branch protection configured successfully"
+        else
+          echo "configured=false" >> $GITHUB_OUTPUT
+          echo "❌ Failed to configure branch protection"
+          exit 1
+        fi
+
+    - name: Validate branch protection
+      id: validate
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITHUB_REPOSITORY: ${{ inputs.repository }}
+      run: |
+        echo "🔍 Validating branch protection configuration..."
+
+        cd ${{ github.action_path }}
+
+        # Copy the script to current directory if it doesn't exist
+        if [ ! -f setup-branch-protection.js ]; then
+          cp ${{ github.workspace }}/.github/scripts/setup-branch-protection.js .
+        fi
+
+        if node setup-branch-protection.js validate; then
+          echo "result=success" >> $GITHUB_OUTPUT
+          echo "✅ Branch protection validation passed"
+        else
+          echo "result=failure" >> $GITHUB_OUTPUT
+          echo "⚠️ Branch protection validation failed"
+        fi
+
+    - name: Generate summary
+      shell: bash
+      run: |
+        echo "## 🔒 Branch Protection Configuration" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        if [ "${{ inputs.validate-only }}" = "true" ]; then
+          echo "**Mode:** Validation only" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "**Mode:** Setup and validation" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        echo "**Repository:** ${{ inputs.repository }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Branch:** main" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        if [ "${{ inputs.validate-only }}" != "true" ]; then
+          if [ "${{ steps.setup.outputs.configured }}" = "true" ]; then
+            echo "✅ **Setup Result:** Branch protection configured successfully" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Setup Result:** Failed to configure branch protection" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        if [ "${{ steps.validate.outputs.result }}" = "success" ]; then
+          echo "✅ **Validation Result:** Branch protection is properly configured" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⚠️ **Validation Result:** Branch protection validation failed" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📋 Protection Rules Applied" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Required status checks from PR validation workflow" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Require branches to be up to date before merging" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Require at least 1 PR review approval" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Dismiss stale reviews when new commits are pushed" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Require all conversations to be resolved" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Prevent force pushes and branch deletions" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🔍 Required Status Checks" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- Quality Gates" >> $GITHUB_STEP_SUMMARY
+        echo "- Security Audit" >> $GITHUB_STEP_SUMMARY
+        echo "- Test Matrix" >> $GITHUB_STEP_SUMMARY
+        echo "- Build Validation" >> $GITHUB_STEP_SUMMARY
+        echo "- PR Summary" >> $GITHUB_STEP_SUMMARY

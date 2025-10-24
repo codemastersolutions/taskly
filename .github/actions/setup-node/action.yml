@@ -1,0 +1,50 @@
+name: 'Setup Node.js with Cache'
+description: 'Setup Node.js with optimized cache for dependencies'
+inputs:
+  node-version:
+    description: 'Node.js version to use'
+    required: false
+    default: '18.x'
+  cache-dependency-path:
+    description: 'Path to package-lock.json or yarn.lock'
+    required: false
+    default: 'package-lock.json'
+  registry-url:
+    description: 'NPM registry URL'
+    required: false
+    default: 'https://registry.npmjs.org'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        registry-url: ${{ inputs.registry-url }}
+        cache: 'npm'
+        cache-dependency-path: ${{ inputs.cache-dependency-path }}
+
+    - name: Verify Node.js and npm versions
+      shell: bash
+      run: |
+        echo "Node.js version: $(node --version)"
+        echo "npm version: $(npm --version)"
+        echo "Registry: $(npm config get registry)"
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        if [ -f "package-lock.json" ]; then
+          npm ci --prefer-offline --no-audit
+        elif [ -f "yarn.lock" ]; then
+          yarn install --frozen-lockfile --prefer-offline
+        else
+          npm install --prefer-offline --no-audit
+        fi
+
+    - name: Verify installation
+      shell: bash
+      run: |
+        echo "Dependencies installed successfully"
+        npm list --depth=0 || true

@@ -1,0 +1,246 @@
+name: 'Collect Metrics'
+description: 'Collect workflow and performance metrics for monitoring and analysis'
+author: 'CodeMaster Solutions'
+
+inputs:
+  metrics-type:
+    description: 'Type of metrics to collect (workflow, bundle, release, job, performance)'
+    required: true
+
+  data-file:
+    description: 'Path to JSON file containing metrics data'
+    required: false
+    default: ''
+
+  data-json:
+    description: 'JSON string containing metrics data (alternative to data-file)'
+    required: false
+    default: ''
+
+  job-name:
+    description: 'Name of the current job (for job metrics)'
+    required: false
+    default: ${{ github.job }}
+
+  start-time:
+    description: 'Job/workflow start time (ISO string)'
+    required: false
+    default: ''
+
+  auto-collect:
+    description: 'Automatically collect common metrics based on context'
+    required: false
+    default: 'true'
+
+  export-summary:
+    description: 'Export metrics summary to step summary'
+    required: false
+    default: 'false'
+
+outputs:
+  metrics-collected:
+    description: 'Whether metrics were successfully collected'
+    value: ${{ steps.collect.outputs.success }}
+
+  metrics-file:
+    description: 'Path to the metrics file'
+    value: ${{ steps.collect.outputs.metrics-file }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+
+    - name: Prepare metrics data
+      id: prepare
+      shell: bash
+      run: |
+        METRICS_TYPE="${{ inputs.metrics-type }}"
+
+        # Create base metrics data
+        cat > base-metrics.json << EOF
+        {
+          "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)",
+          "workflowName": "${{ github.workflow }}",
+          "runId": "${{ github.run_id }}",
+          "runNumber": "${{ github.run_number }}",
+          "runAttempt": "${{ github.run_attempt }}",
+          "actor": "${{ github.actor }}",
+          "event": "${{ github.event_name }}",
+          "ref": "${{ github.ref }}",
+          "sha": "${{ github.sha }}",
+          "repository": "${{ github.repository }}",
+          "jobName": "${{ inputs.job-name }}",
+          "startTime": "${{ inputs.start-time }}"
+        }
+        EOF
+
+        # Merge with provided data
+        if [ -n "${{ inputs.data-json }}" ]; then
+          echo '${{ inputs.data-json }}' > provided-data.json
+          node -e "
+            const base = JSON.parse(require('fs').readFileSync('base-metrics.json', 'utf8'));
+            const provided = JSON.parse(require('fs').readFileSync('provided-data.json', 'utf8'));
+            const merged = { ...base, ...provided };
+            require('fs').writeFileSync('merged-metrics.json', JSON.stringify(merged, null, 2));
+          "
+          echo "data-file=merged-metrics.json" >> $GITHUB_OUTPUT
+        elif [ -n "${{ inputs.data-file }}" ]; then
+          node -e "
+            const base = JSON.parse(require('fs').readFileSync('base-metrics.json', 'utf8'));
+            const provided = JSON.parse(require('fs').readFileSync('${{ inputs.data-file }}', 'utf8'));
+            const merged = { ...base, ...provided };
+            require('fs').writeFileSync('merged-metrics.json', JSON.stringify(merged, null, 2));
+          "
+          echo "data-file=merged-metrics.json" >> $GITHUB_OUTPUT
+        else
+          echo "data-file=base-metrics.json" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Auto-collect context metrics
+      if: inputs.auto-collect == 'true'
+      shell: bash
+      run: |
+        METRICS_TYPE="${{ inputs.metrics-type }}"
+        DATA_FILE="${{ steps.prepare.outputs.data-file }}"
+
+        # Add context-specific metrics based on type
+        case "$METRICS_TYPE" in
+          "workflow")
+            # Add workflow-specific metrics
+            node -e "
+              const data = JSON.parse(require('fs').readFileSync('$DATA_FILE', 'utf8'));
+              
+              // Calculate duration if start time is available
+              if (data.startTime) {
+                const start = new Date(data.startTime);
+                const end = new Date();
+                data.duration = Math.round((end - start) / 1000);
+              }
+              
+              // Add environment info
+              data.runner = {
+                os: process.platform,
+                arch: process.arch,
+                nodeVersion: process.version
+              };
+              
+              require('fs').writeFileSync('$DATA_FILE', JSON.stringify(data, null, 2));
+            "
+            ;;
+            
+          "job")
+            # Add job-specific metrics
+            node -e "
+              const data = JSON.parse(require('fs').readFileSync('$DATA_FILE', 'utf8'));
+              
+              // Calculate job duration
+              if (data.startTime) {
+                const start = new Date(data.startTime);
+                const end = new Date();
+                data.duration = Math.round((end - start) / 1000);
+              }
+              
+              // Add resource usage (basic)
+              data.resourceUsage = {
+                memoryUsage: process.memoryUsage(),
+                cpuUsage: process.cpuUsage ? process.cpuUsage() : null
+              };
+              
+              require('fs').writeFileSync('$DATA_FILE', JSON.stringify(data, null, 2));
+            "
+            ;;
+            
+          "bundle")
+            # Add bundle metrics if dist directory exists
+            if [ -d "dist" ]; then
+              node -e "
+                const fs = require('fs');
+                const path = require('path');
+                const data = JSON.parse(fs.readFileSync('$DATA_FILE', 'utf8'));
+                
+                // Calculate bundle sizes
+                const distDir = 'dist';
+                if (fs.existsSync(distDir)) {
+                  const calculateSize = (filePath) => {
+                    try {
+                      const stats = fs.statSync(filePath);
+                      return stats.size;
+                    } catch (e) {
+                      return 0;
+                    }
+                  };
+                  
+                  data.cjsSize = calculateSize('dist/cjs/index.js');
+                  data.esmSize = calculateSize('dist/esm/index.js');
+                  data.typesSize = calculateSize('dist/types/index.d.ts');
+                  data.binSize = calculateSize('dist/cjs/bin/taskly.js');
+                  
+                  data.totalSize = data.cjsSize + data.esmSize + data.typesSize + data.binSize;
+                }
+                
+                fs.writeFileSync('$DATA_FILE', JSON.stringify(data, null, 2));
+              "
+            fi
+            ;;
+        esac
+
+    - name: Collect metrics
+      id: collect
+      shell: bash
+      run: |
+        DATA_FILE="${{ steps.prepare.outputs.data-file }}"
+        METRICS_TYPE="${{ inputs.metrics-type }}"
+
+        echo "Collecting $METRICS_TYPE metrics..."
+
+        # Run the metrics collector
+        if node ${{ github.action_path }}/../../scripts/metrics-collector.js collect "$METRICS_TYPE" "$DATA_FILE"; then
+          echo "success=true" >> $GITHUB_OUTPUT
+          echo "✅ Metrics collected successfully"
+          
+          # Find the metrics file
+          TODAY=$(date -u +%Y-%m-%d)
+          METRICS_FILE=".github/metrics/${METRICS_TYPE}-${TODAY}.jsonl"
+          echo "metrics-file=$METRICS_FILE" >> $GITHUB_OUTPUT
+        else
+          echo "success=false" >> $GITHUB_OUTPUT
+          echo "❌ Failed to collect metrics"
+          exit 1
+        fi
+
+    - name: Export metrics summary
+      if: inputs.export-summary == 'true' && steps.collect.outputs.success == 'true'
+      shell: bash
+      run: |
+        echo "## 📊 Metrics Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        # Generate and display summary
+        SUMMARY=$(node ${{ github.action_path }}/../../scripts/metrics-collector.js summary)
+
+        echo "### Current Metrics" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+        echo "$SUMMARY" | jq '.recentWorkflows[-1] // {}' >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Metrics Type:** ${{ inputs.metrics-type }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Collected At:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+        echo "**Metrics File:** \`${{ steps.collect.outputs.metrics-file }}\`" >> $GITHUB_STEP_SUMMARY
+
+    - name: Upload metrics as artifact
+      if: steps.collect.outputs.success == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: metrics-${{ inputs.metrics-type }}-${{ github.run_number }}
+        path: .github/metrics/
+        retention-days: 90
+
+    - name: Cleanup temporary files
+      shell: bash
+      run: |
+        rm -f base-metrics.json provided-data.json merged-metrics.json

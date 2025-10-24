@@ -311,6 +311,49 @@ npm run format
 | `npm run format` | Format code with Prettier |
 | `npm run type-check` | Check TypeScript types |
 
+## 🚀 CI/CD Pipeline
+
+This project uses an automated CI/CD pipeline that ensures code quality and handles automatic publishing to NPM.
+
+### Pull Request Validation
+
+Every pull request is automatically validated through comprehensive checks:
+
+- **Quality Gates**: ESLint, Prettier, and TypeScript type checking
+- **Security Audit**: Dependency vulnerability scanning and license validation
+- **Test Matrix**: Full test suite across Node.js 16.x, 18.x, 20.x on Ubuntu, Windows, and macOS
+- **Build Validation**: Production build verification and bundle size checks
+
+### Automatic Publishing
+
+When a PR is merged to `main`, the system automatically:
+
+1. **Analyzes commits** using conventional commit format to determine version increment
+2. **Runs comprehensive validation** including quality checks, security audit, and cross-platform testing
+3. **Publishes to NPM** with proper versioning and package optimization
+4. **Creates GitHub releases** with automated changelog generation
+5. **Provides detailed reports** and notifications
+
+### Conventional Commits
+
+The project follows [Conventional Commits](https://www.conventionalcommits.org/) for automatic versioning:
+
+- `feat:` - New features (minor version bump)
+- `fix:` - Bug fixes (patch version bump)
+- `BREAKING CHANGE:` or `!:` - Breaking changes (major version bump)
+- `docs:`, `style:`, `refactor:`, `test:`, `chore:` - No version bump
+
+### Configuration
+
+The CI/CD system is configured through:
+
+- **Workflows**: `.github/workflows/pr-validation.yml` and `.github/workflows/auto-publish.yml`
+- **Security Config**: `.github/security-config.yml`
+- **Quality Thresholds**: Minimum 80% test coverage, bundle size limits
+- **Cross-platform Testing**: Node.js 16.x, 18.x, 20.x on Ubuntu, Windows, macOS
+
+For detailed setup instructions, see [CI/CD Documentation](.github/docs/CICD_GUIDE.md).
+
 ## 🤝 Contributing
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
