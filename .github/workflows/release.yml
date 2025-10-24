@@ -1,0 +1,330 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+
+      - name: Extract version information
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+            TAG="v${VERSION}"
+            IS_PRERELEASE="${{ github.event.inputs.prerelease }}"
+          else
+            TAG="${{ github.ref_name }}"
+            VERSION="${TAG#v}"
+            IS_PRERELEASE="false"
+            
+            # Check if it's a prerelease version (contains alpha, beta, rc, etc.)
+            if [[ "$VERSION" =~ (alpha|beta|rc|pre) ]]; then
+              IS_PRERELEASE="true"
+            fi
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+
+          echo "## Release Information" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** $VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** $TAG" >> $GITHUB_STEP_SUMMARY
+          echo "- **Pre-release:** $IS_PRERELEASE" >> $GITHUB_STEP_SUMMARY
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Validate semantic version format
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$ ]]; then
+            echo "❌ Invalid version format: $VERSION"
+            echo "Version must follow semantic versioning (e.g., 1.0.0, 1.0.0-alpha.1)"
+            exit 1
+          fi
+
+          echo "✅ Version format is valid: $VERSION"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run full test suite
+        run: npm run test:ci
+
+      - name: Run quality checks
+        run: npm run quality
+
+      - name: Build for production
+        run: npm run build:prod
+
+      - name: Validate package.json version
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          RELEASE_VERSION="${{ steps.version.outputs.version }}"
+
+          if [ "$PACKAGE_VERSION" != "$RELEASE_VERSION" ]; then
+            echo "❌ Version mismatch!"
+            echo "package.json version: $PACKAGE_VERSION"
+            echo "Release version: $RELEASE_VERSION"
+            echo ""
+            echo "Please update package.json version to match the release version."
+            exit 1
+          fi
+
+          echo "✅ Package version matches release version: $RELEASE_VERSION"
+
+  test-matrix:
+    name: Test Release on ${{ matrix.os }} with Node.js ${{ matrix.node-version }}
+    runs-on: ${{ matrix.os }}
+    needs: validate
+
+    strategy:
+      matrix:
+        node-version: [16.x, 18.x, 20.x]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build library
+        run: npm run build:prod
+
+      - name: Test built library
+        run: |
+          # Test CommonJS import
+          node -e "
+            const taskly = require('./dist/cjs/index.js');
+            console.log('✅ CommonJS import successful');
+            console.log('Exports:', Object.keys(taskly));
+          "
+
+          # Test ESM import
+          node -e "
+            import('./dist/esm/index.js').then(taskly => {
+              console.log('✅ ESM import successful');
+              console.log('Exports:', Object.keys(taskly));
+            }).catch(err => {
+              console.error('❌ ESM import failed:', err.message);
+              process.exit(1);
+            });
+          "
+
+      - name: Test CLI executable
+        run: |
+          # Make CLI executable
+          chmod +x ./dist/cjs/bin/taskly.js
+
+          # Test CLI help
+          node ./dist/cjs/bin/taskly.js --help
+
+          # Test CLI version
+          node ./dist/cjs/bin/taskly.js --version
+
+      - name: Run integration tests
+        run: npm run test:ci
+
+  publish:
+    name: Publish to NPM
+    runs-on: ubuntu-latest
+    needs: [validate, test-matrix]
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build for production
+        run: npm run build:prod
+
+      - name: Configure NPM authentication
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+          npm whoami
+
+      - name: Publish to NPM
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          IS_PRERELEASE="${{ needs.validate.outputs.is_prerelease }}"
+
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            echo "📦 Publishing pre-release version $VERSION..."
+            npm publish --tag beta --access public
+          else
+            echo "📦 Publishing stable version $VERSION..."
+            npm publish --access public
+          fi
+
+          echo "✅ Successfully published @codemastersolutions/taskly@$VERSION"
+
+      - name: Verify publication
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+
+          # Wait a moment for NPM to propagate
+          sleep 10
+
+          # Verify the package is available
+          npm view @codemastersolutions/taskly@$VERSION
+
+          echo "✅ Package verification successful"
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate, publish]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          TAG="${{ needs.validate.outputs.tag }}"
+
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          echo "## What's Changed" > changelog.md
+          echo "" >> changelog.md
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "### Commits since $PREV_TAG" >> changelog.md
+            echo "" >> changelog.md
+            
+            # Generate commit list
+            git log --pretty=format:"- %s (%h)" $PREV_TAG..HEAD >> changelog.md
+          else
+            echo "### Initial Release" >> changelog.md
+            echo "" >> changelog.md
+            echo "- Initial release of Taskly library" >> changelog.md
+          fi
+
+          echo "" >> changelog.md
+          echo "### Installation" >> changelog.md
+          echo "" >> changelog.md
+          echo '```bash' >> changelog.md
+          echo "npm install @codemastersolutions/taskly@$VERSION" >> changelog.md
+          echo '```' >> changelog.md
+          echo "" >> changelog.md
+          echo "### Documentation" >> changelog.md
+          echo "" >> changelog.md
+          echo "- [README](https://github.com/codemastersolutions/taskly#readme)" >> changelog.md
+          echo "- [API Documentation](https://github.com/codemastersolutions/taskly/blob/main/docs/api.md)" >> changelog.md
+          echo "- [Examples](https://github.com/codemastersolutions/taskly/tree/main/examples)" >> changelog.md
+
+          # Set output for release body
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          cat changelog.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.validate.outputs.tag }}
+          release_name: Release ${{ needs.validate.outputs.version }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: ${{ needs.validate.outputs.is_prerelease }}
+
+      - name: Update package metadata
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+
+          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🎉 **Successfully released version $VERSION**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [NPM Package](https://www.npmjs.com/package/@codemastersolutions/taskly)" >> $GITHUB_STEP_SUMMARY
+          echo "- [GitHub Release](https://github.com/codemastersolutions/taskly/releases/tag/${{ needs.validate.outputs.tag }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [Documentation](https://github.com/codemastersolutions/taskly#readme)" >> $GITHUB_STEP_SUMMARY
+
+  notify:
+    name: Post-Release Notifications
+    runs-on: ubuntu-latest
+    needs: [validate, create-release]
+    if: always()
+
+    steps:
+      - name: Notify on success
+        if: needs.create-release.result == 'success'
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          echo "🎉 Release $VERSION completed successfully!"
+
+          # Here you could add notifications to Slack, Discord, etc.
+          # Example:
+          # curl -X POST -H 'Content-type: application/json' \
+          #   --data '{"text":"🎉 Taskly v'$VERSION' has been released!"}' \
+          #   ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          echo "❌ Release $VERSION failed!"
+
+          # Here you could add failure notifications
+          # Example:
+          # curl -X POST -H 'Content-type: application/json' \
+          #   --data '{"text":"❌ Taskly v'$VERSION' release failed!"}' \
+          #   ${{ secrets.SLACK_WEBHOOK_URL }}

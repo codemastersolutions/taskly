@@ -1,0 +1,224 @@
+name: Version Bump
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Type of version bump'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - prerelease
+      prerelease_id:
+        description: 'Pre-release identifier (alpha, beta, rc)'
+        required: false
+        default: 'alpha'
+        type: choice
+        options:
+          - alpha
+          - beta
+          - rc
+      create_release:
+        description: 'Create release after version bump'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  bump-version:
+    name: Bump Version
+    runs-on: ubuntu-latest
+
+    outputs:
+      new_version: ${{ steps.bump.outputs.new_version }}
+      old_version: ${{ steps.bump.outputs.old_version }}
+      tag: ${{ steps.bump.outputs.tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests before version bump
+        run: npm run test:ci
+
+      - name: Bump version
+        id: bump
+        run: |
+          OLD_VERSION=$(node -p "require('./package.json').version")
+          BUMP_TYPE="${{ github.event.inputs.bump_type }}"
+
+          echo "Current version: $OLD_VERSION"
+          echo "Bump type: $BUMP_TYPE"
+
+          # Perform version bump based on type
+          if [ "$BUMP_TYPE" = "prerelease" ]; then
+            PRERELEASE_ID="${{ github.event.inputs.prerelease_id }}"
+            
+            # Check if current version is already a prerelease
+            if [[ "$OLD_VERSION" =~ -$PRERELEASE_ID\.[0-9]+$ ]]; then
+              # Increment existing prerelease
+              npm version prerelease --no-git-tag-version
+            else
+              # Create new prerelease
+              npm version pre$PRERELEASE_ID --no-git-tag-version
+            fi
+          else
+            npm version $BUMP_TYPE --no-git-tag-version
+          fi
+
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          TAG="v$NEW_VERSION"
+
+          echo "New version: $NEW_VERSION"
+          echo "Tag: $TAG"
+
+          echo "old_version=$OLD_VERSION" >> $GITHUB_OUTPUT
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Update CHANGELOG.md
+        run: |
+          NEW_VERSION="${{ steps.bump.outputs.new_version }}"
+          OLD_VERSION="${{ steps.bump.outputs.old_version }}"
+          DATE=$(date +%Y-%m-%d)
+
+          # Create changelog entry
+          echo "## [$NEW_VERSION] - $DATE" > changelog_entry.md
+          echo "" >> changelog_entry.md
+
+          # Get commits since last version
+          if git describe --tags --abbrev=0 HEAD^ >/dev/null 2>&1; then
+            LAST_TAG=$(git describe --tags --abbrev=0 HEAD^)
+            echo "### Changes since $LAST_TAG" >> changelog_entry.md
+            echo "" >> changelog_entry.md
+            
+            # Categorize commits
+            echo "### Added" >> changelog_entry.md
+            git log --pretty=format:"- %s" $LAST_TAG..HEAD | grep -i "^- \(add\|feat\)" || echo "- No new features" >> changelog_entry.md
+            echo "" >> changelog_entry.md
+            
+            echo "### Changed" >> changelog_entry.md
+            git log --pretty=format:"- %s" $LAST_TAG..HEAD | grep -i "^- \(change\|update\|improve\)" || echo "- No changes" >> changelog_entry.md
+            echo "" >> changelog_entry.md
+            
+            echo "### Fixed" >> changelog_entry.md
+            git log --pretty=format:"- %s" $LAST_TAG..HEAD | grep -i "^- \(fix\|bug\)" || echo "- No fixes" >> changelog_entry.md
+            echo "" >> changelog_entry.md
+          else
+            echo "### Initial Release" >> changelog_entry.md
+            echo "- Initial release of Taskly library" >> changelog_entry.md
+            echo "" >> changelog_entry.md
+          fi
+
+          # Prepend to existing CHANGELOG.md if it exists
+          if [ -f "CHANGELOG.md" ]; then
+            # Create temporary file with new entry + existing content
+            cat changelog_entry.md > temp_changelog.md
+            echo "" >> temp_changelog.md
+            cat CHANGELOG.md >> temp_changelog.md
+            mv temp_changelog.md CHANGELOG.md
+          else
+            # Create new CHANGELOG.md
+            echo "# Changelog" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "All notable changes to this project will be documented in this file." >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)," >> CHANGELOG.md
+            echo "and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)." >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            cat changelog_entry.md >> CHANGELOG.md
+          fi
+
+          rm changelog_entry.md
+
+      - name: Commit version bump
+        run: |
+          NEW_VERSION="${{ steps.bump.outputs.new_version }}"
+          TAG="${{ steps.bump.outputs.tag }}"
+
+          # Add changed files
+          git add package.json package-lock.json CHANGELOG.md
+
+          # Commit changes
+          git commit -m "chore: bump version to $NEW_VERSION"
+
+          # Create tag
+          git tag -a "$TAG" -m "Release $NEW_VERSION"
+
+          # Push changes and tag
+          git push origin main
+          git push origin "$TAG"
+
+          echo "✅ Version bumped to $NEW_VERSION and tagged as $TAG"
+
+      - name: Generate release summary
+        run: |
+          NEW_VERSION="${{ steps.bump.outputs.new_version }}"
+          OLD_VERSION="${{ steps.bump.outputs.old_version }}"
+          TAG="${{ steps.bump.outputs.tag }}"
+
+          echo "## Version Bump Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Previous Version:** $OLD_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- **New Version:** $NEW_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** $TAG" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bump Type:** ${{ github.event.inputs.bump_type }}" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ github.event.inputs.create_release }}" = "true" ]; then
+            echo "- **Release:** Will be created automatically" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Release:** Manual trigger required" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  trigger-release:
+    name: Trigger Release
+    runs-on: ubuntu-latest
+    needs: bump-version
+    if: github.event.inputs.create_release == 'true'
+
+    steps:
+      - name: Trigger release workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: workflow } = await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'release.yml',
+              ref: 'main',
+              inputs: {
+                version: '${{ needs.bump-version.outputs.new_version }}',
+                prerelease: '${{ contains(needs.bump-version.outputs.new_version, '-') }}'
+              }
+            });
+
+            console.log('Release workflow triggered successfully');
+
+      - name: Create summary
+        run: |
+          echo "## Release Triggered" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🚀 Release workflow has been triggered for version ${{ needs.bump-version.outputs.new_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the [Actions tab](https://github.com/${{ github.repository }}/actions) for release progress." >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,367 @@
+name: Monitoring & Alerts
+
+on:
+  schedule:
+    # Run monitoring checks twice daily
+    - cron: '0 6,18 * * *'
+  workflow_dispatch:
+    inputs:
+      check_type:
+        description: 'Type of monitoring check'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - dependencies
+          - performance
+          - security
+          - bundle
+
+jobs:
+  dependency-monitoring:
+    name: Dependency Health Check
+    runs-on: ubuntu-latest
+    if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'dependencies' || github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+
+      - name: Check dependency freshness
+        run: |
+          echo "## 📦 Dependency Health Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Install dependencies
+          npm ci
+
+          # Check for outdated dependencies
+          npm outdated --json > outdated.json || true
+
+          # Analyze outdated packages
+          if [ -s "outdated.json" ]; then
+            node -e "
+              const outdated = JSON.parse(require('fs').readFileSync('outdated.json', 'utf8'));
+              const packages = Object.keys(outdated);
+              
+              if (packages.length > 0) {
+                let criticalUpdates = 0;
+                let majorUpdates = 0;
+                let minorUpdates = 0;
+                
+                console.log('### Outdated Dependencies');
+                console.log('| Package | Current | Latest | Type |');
+                console.log('|---------|---------|--------|------|');
+                
+                packages.forEach(pkg => {
+                  const info = outdated[pkg];
+                  const current = info.current.split('.');
+                  const latest = info.latest.split('.');
+                  
+                  let updateType = 'patch';
+                  if (parseInt(latest[0]) > parseInt(current[0])) {
+                    updateType = 'major';
+                    majorUpdates++;
+                  } else if (parseInt(latest[1]) > parseInt(current[1])) {
+                    updateType = 'minor';
+                    minorUpdates++;
+                  }
+                  
+                  // Check if it's a security-related package
+                  const securityPackages = ['eslint', 'typescript', 'vitest', 'prettier'];
+                  if (securityPackages.some(sp => pkg.includes(sp))) {
+                    criticalUpdates++;
+                    updateType += ' (security)';
+                  }
+                  
+                  console.log('| ' + pkg + ' | ' + info.current + ' | ' + info.latest + ' | ' + updateType + ' |');
+                });
+                
+                console.log('');
+                console.log('### Summary');
+                console.log('- **Total outdated:** ' + packages.length);
+                console.log('- **Major updates:** ' + majorUpdates);
+                console.log('- **Minor updates:** ' + minorUpdates);
+                console.log('- **Security-related:** ' + criticalUpdates);
+                
+                if (criticalUpdates > 0 || majorUpdates > 5) {
+                  console.log('');
+                  console.log('⚠️ **Action required:** Critical or many major updates available');
+                  process.exit(1);
+                }
+              } else {
+                console.log('✅ All dependencies are up to date');
+              }
+            " >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ All dependencies are up to date" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check for deprecated packages
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deprecated Packages Check" >> $GITHUB_STEP_SUMMARY
+
+          # Check for deprecated packages in package.json
+          npm ls --depth=0 --json > package-tree.json || true
+
+          if [ -f "package-tree.json" ]; then
+            node -e "
+              try {
+                const tree = JSON.parse(require('fs').readFileSync('package-tree.json', 'utf8'));
+                const deps = tree.dependencies || {};
+                let deprecatedCount = 0;
+                
+                Object.keys(deps).forEach(pkg => {
+                  const info = deps[pkg];
+                  if (info.problems && info.problems.some(p => p.includes('deprecated'))) {
+                    if (deprecatedCount === 0) {
+                      console.log('| Package | Issue |');
+                      console.log('|---------|-------|');
+                    }
+                    console.log('| ' + pkg + ' | Deprecated |');
+                    deprecatedCount++;
+                  }
+                });
+                
+                if (deprecatedCount === 0) {
+                  console.log('✅ No deprecated packages found');
+                } else {
+                  console.log('');
+                  console.log('⚠️ **' + deprecatedCount + ' deprecated packages found**');
+                }
+              } catch (e) {
+                console.log('✅ No deprecated packages found');
+              }
+            " >> $GITHUB_STEP_SUMMARY
+          fi
+
+  performance-monitoring:
+    name: Performance Monitoring
+    runs-on: ubuntu-latest
+    if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'performance' || github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build performance test
+        run: |
+          echo "## ⚡ Performance Monitoring" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Time the build process
+          echo "### Build Performance" >> $GITHUB_STEP_SUMMARY
+
+          START_TIME=$(date +%s)
+          npm run build:prod
+          END_TIME=$(date +%s)
+          BUILD_TIME=$((END_TIME - START_TIME))
+
+          echo "- **Build time:** ${BUILD_TIME}s" >> $GITHUB_STEP_SUMMARY
+
+          # Check if build time is reasonable (under 30 seconds)
+          if [ $BUILD_TIME -gt 30 ]; then
+            echo "- **Status:** ⚠️ Build time is slower than expected" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Status:** ✅ Build time is acceptable" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Test performance
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Test Performance" >> $GITHUB_STEP_SUMMARY
+
+          # Time the test execution
+          START_TIME=$(date +%s)
+          npm run test:ci
+          END_TIME=$(date +%s)
+          TEST_TIME=$((END_TIME - START_TIME))
+
+          echo "- **Test time:** ${TEST_TIME}s" >> $GITHUB_STEP_SUMMARY
+
+          # Check if test time is reasonable (under 60 seconds)
+          if [ $TEST_TIME -gt 60 ]; then
+            echo "- **Status:** ⚠️ Test execution is slower than expected" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Status:** ✅ Test execution time is acceptable" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Bundle size monitoring
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Bundle Size Monitoring" >> $GITHUB_STEP_SUMMARY
+
+          # Check current bundle sizes
+          CJS_SIZE=$(stat -f%z dist/cjs/index.js 2>/dev/null || stat -c%s dist/cjs/index.js)
+          ESM_SIZE=$(stat -f%z dist/esm/index.js 2>/dev/null || stat -c%s dist/esm/index.js)
+
+          # Convert to KB
+          CJS_KB=$((CJS_SIZE / 1024))
+          ESM_KB=$((ESM_SIZE / 1024))
+
+          echo "- **CommonJS bundle:** ${CJS_KB}KB" >> $GITHUB_STEP_SUMMARY
+          echo "- **ESM bundle:** ${ESM_KB}KB" >> $GITHUB_STEP_SUMMARY
+
+          # Alert if bundles are getting too large (>40KB)
+          if [ $CJS_KB -gt 40 ] || [ $ESM_KB -gt 40 ]; then
+            echo "- **Status:** ⚠️ Bundle size is approaching the limit" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Status:** ✅ Bundle size is within acceptable limits" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  security-monitoring:
+    name: Security Monitoring
+    runs-on: ubuntu-latest
+    if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'security' || github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+
+      - name: Security audit monitoring
+        run: |
+          echo "## 🔒 Security Monitoring" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          npm ci
+
+          # Run security audit
+          npm audit --json > security-audit.json || true
+
+          if [ -f "security-audit.json" ]; then
+            node -e "
+              try {
+                const audit = JSON.parse(require('fs').readFileSync('security-audit.json', 'utf8'));
+                const vulnerabilities = audit.metadata?.vulnerabilities || {};
+                
+                const critical = vulnerabilities.critical || 0;
+                const high = vulnerabilities.high || 0;
+                const moderate = vulnerabilities.moderate || 0;
+                const low = vulnerabilities.low || 0;
+                const total = critical + high + moderate + low;
+                
+                console.log('### Vulnerability Summary');
+                console.log('| Severity | Count |');
+                console.log('|----------|-------|');
+                console.log('| Critical | ' + critical + ' |');
+                console.log('| High | ' + high + ' |');
+                console.log('| Moderate | ' + moderate + ' |');
+                console.log('| Low | ' + low + ' |');
+                console.log('| **Total** | **' + total + '** |');
+                
+                if (critical > 0 || high > 0) {
+                  console.log('');
+                  console.log('🚨 **Critical or High severity vulnerabilities detected!**');
+                  console.log('Immediate action required.');
+                  process.exit(1);
+                } else if (moderate > 0) {
+                  console.log('');
+                  console.log('⚠️ **Moderate vulnerabilities found**');
+                  console.log('Consider updating affected packages.');
+                } else if (total === 0) {
+                  console.log('');
+                  console.log('✅ **No security vulnerabilities found**');
+                }
+              } catch (e) {
+                console.log('✅ No security vulnerabilities found');
+              }
+            " >> $GITHUB_STEP_SUMMARY
+          fi
+
+  create-monitoring-issue:
+    name: Create Monitoring Issue
+    runs-on: ubuntu-latest
+    needs: [dependency-monitoring, performance-monitoring, security-monitoring]
+    if: failure() && github.event_name == 'schedule'
+
+    steps:
+      - name: Create monitoring alert issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `🚨 Monitoring Alert - ${new Date().toISOString().split('T')[0]}`;
+            const body = `
+            ## Monitoring Alert Report
+
+            **Date:** ${new Date().toISOString()}
+            **Workflow:** ${{ github.workflow }}
+            **Run ID:** ${{ github.run_id }}
+
+            ### Failed Checks
+
+            `;
+
+            let failedChecks = [];
+
+            if ('${{ needs.dependency-monitoring.result }}' === 'failure') {
+              failedChecks.push('- 📦 **Dependency Monitoring**: Critical dependency updates or deprecated packages found');
+            }
+
+            if ('${{ needs.performance-monitoring.result }}' === 'failure') {
+              failedChecks.push('- ⚡ **Performance Monitoring**: Build or test performance degradation detected');
+            }
+
+            if ('${{ needs.security-monitoring.result }}' === 'failure') {
+              failedChecks.push('- 🔒 **Security Monitoring**: Security vulnerabilities detected');
+            }
+
+            const finalBody = body + failedChecks.join('\n') + `
+
+            ### Actions Required
+
+            1. Review the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for detailed information
+            2. Address the issues identified in the failed checks
+            3. Update dependencies, fix security issues, or optimize performance as needed
+            4. Close this issue once all problems are resolved
+
+            ### Monitoring Details
+
+            - **Dependency Health**: Check for outdated or deprecated packages
+            - **Performance**: Monitor build and test execution times
+            - **Security**: Scan for vulnerabilities in dependencies
+            - **Bundle Size**: Ensure bundles stay within size limits
+
+            ---
+            *This issue was automatically created by the monitoring workflow.*
+            `;
+
+            // Check if similar issue already exists
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['monitoring', 'automated'],
+              state: 'open'
+            });
+
+            if (issues.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: finalBody,
+                labels: ['bug', 'monitoring', 'automated', 'priority-high']
+              });
+            }

@@ -1,0 +1,365 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run security scan daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  dependency-scan:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: |
+          echo "## NPM Audit Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Run audit and capture output
+          npm audit --json > audit-report.json || true
+
+          # Parse and display results
+          if [ -f "audit-report.json" ]; then
+            node -e "
+              try {
+                const audit = JSON.parse(require('fs').readFileSync('audit-report.json', 'utf8'));
+                const vulnerabilities = audit.metadata?.vulnerabilities || {};
+                const total = Object.values(vulnerabilities).reduce((sum, count) => sum + count, 0);
+                
+                console.log('| Severity | Count |');
+                console.log('|----------|-------|');
+                console.log('| Critical | ' + (vulnerabilities.critical || 0) + ' |');
+                console.log('| High | ' + (vulnerabilities.high || 0) + ' |');
+                console.log('| Moderate | ' + (vulnerabilities.moderate || 0) + ' |');
+                console.log('| Low | ' + (vulnerabilities.low || 0) + ' |');
+                console.log('| Info | ' + (vulnerabilities.info || 0) + ' |');
+                console.log('| **Total** | **' + total + '** |');
+                
+                if (vulnerabilities.critical > 0 || vulnerabilities.high > 0) {
+                  console.log('');
+                  console.log('⚠️ **Critical or High severity vulnerabilities found!**');
+                  process.exit(1);
+                }
+              } catch (e) {
+                console.log('✅ No vulnerabilities found or audit data unavailable');
+              }
+            " >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check for outdated dependencies
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Outdated Dependencies" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check for outdated packages
+          npm outdated --json > outdated.json || true
+
+          if [ -s "outdated.json" ]; then
+            node -e "
+              try {
+                const outdated = JSON.parse(require('fs').readFileSync('outdated.json', 'utf8'));
+                const packages = Object.keys(outdated);
+                
+                if (packages.length > 0) {
+                  console.log('| Package | Current | Wanted | Latest |');
+                  console.log('|---------|---------|--------|--------|');
+                  
+                  packages.forEach(pkg => {
+                    const info = outdated[pkg];
+                    console.log('| ' + pkg + ' | ' + info.current + ' | ' + info.wanted + ' | ' + info.latest + ' |');
+                  });
+                } else {
+                  console.log('✅ All dependencies are up to date');
+                }
+              } catch (e) {
+                console.log('✅ All dependencies are up to date');
+              }
+            " >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ All dependencies are up to date" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload security artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports-${{ github.run_number }}
+          path: |
+            audit-report.json
+            outdated.json
+          retention-days: 30
+
+  code-quality:
+    name: Code Quality Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint analysis
+        run: |
+          echo "## Code Quality Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Run ESLint with JSON output
+          npm run lint -- --format json --output-file eslint-report.json || true
+
+          # Parse ESLint results
+          if [ -f "eslint-report.json" ]; then
+            node -e "
+              try {
+                const results = JSON.parse(require('fs').readFileSync('eslint-report.json', 'utf8'));
+                let totalErrors = 0;
+                let totalWarnings = 0;
+                
+                results.forEach(result => {
+                  totalErrors += result.errorCount;
+                  totalWarnings += result.warningCount;
+                });
+                
+                console.log('### ESLint Results');
+                console.log('| Type | Count |');
+                console.log('|------|-------|');
+                console.log('| Errors | ' + totalErrors + ' |');
+                console.log('| Warnings | ' + totalWarnings + ' |');
+                
+                if (totalErrors > 0) {
+                  console.log('');
+                  console.log('❌ **ESLint errors found! Please fix before merging.**');
+                  process.exit(1);
+                } else if (totalWarnings > 0) {
+                  console.log('');
+                  console.log('⚠️ **ESLint warnings found. Consider fixing them.**');
+                } else {
+                  console.log('');
+                  console.log('✅ **No ESLint issues found!**');
+                }
+              } catch (e) {
+                console.log('✅ No ESLint issues found');
+              }
+            " >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check code formatting
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Prettier Formatting" >> $GITHUB_STEP_SUMMARY
+
+          if npm run format:check; then
+            echo "✅ Code is properly formatted" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Code formatting issues found" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Run \`npm run format\` to fix formatting issues." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: TypeScript type checking
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### TypeScript Type Checking" >> $GITHUB_STEP_SUMMARY
+
+          if npm run type-check; then
+            echo "✅ No TypeScript type errors" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ TypeScript type errors found" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Upload quality artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-reports-${{ github.run_number }}
+          path: |
+            eslint-report.json
+          retention-days: 30
+
+  bundle-analysis:
+    name: Bundle Size Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build library
+        run: npm run build:prod
+
+      - name: Analyze bundle size
+        run: |
+          echo "## Bundle Size Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Calculate bundle sizes
+          CJS_SIZE=$(du -sb dist/cjs | cut -f1)
+          ESM_SIZE=$(du -sb dist/esm | cut -f1)
+          TYPES_SIZE=$(du -sb dist/types | cut -f1)
+          TOTAL_SIZE=$(du -sb dist | cut -f1)
+
+          # Convert to human readable
+          CJS_HUMAN=$(du -sh dist/cjs | cut -f1)
+          ESM_HUMAN=$(du -sh dist/esm | cut -f1)
+          TYPES_HUMAN=$(du -sh dist/types | cut -f1)
+          TOTAL_HUMAN=$(du -sh dist | cut -f1)
+
+          echo "| Format | Size | Compressed* |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|------|-------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| CommonJS | $CJS_HUMAN | $(gzip -c dist/cjs/index.js | wc -c | numfmt --to=iec) |" >> $GITHUB_STEP_SUMMARY
+          echo "| ESM | $ESM_HUMAN | $(gzip -c dist/esm/index.js | wc -c | numfmt --to=iec) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Types | $TYPES_HUMAN | - |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Total** | **$TOTAL_HUMAN** | - |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "*Gzipped size" >> $GITHUB_STEP_SUMMARY
+
+          # Check bundle size limits
+          MAX_SIZE_BYTES=51200  # 50KB
+
+          if [ $CJS_SIZE -gt $MAX_SIZE_BYTES ] || [ $ESM_SIZE -gt $MAX_SIZE_BYTES ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ **Bundle size exceeds 50KB limit!**" >> $GITHUB_STEP_SUMMARY
+            echo "Consider optimizing the bundle size." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **Bundle size within acceptable limits**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check for large files
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Large Files Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Find files larger than 10KB
+          LARGE_FILES=$(find dist -type f -size +10k -exec ls -lh {} \; | awk '{print $5 " " $9}' || true)
+
+          if [ -n "$LARGE_FILES" ]; then
+            echo "| File | Size |" >> $GITHUB_STEP_SUMMARY
+            echo "|------|------|" >> $GITHUB_STEP_SUMMARY
+            echo "$LARGE_FILES" | while read size file; do
+              echo "| $file | $size |" >> $GITHUB_STEP_SUMMARY
+            done
+          else
+            echo "✅ No files larger than 10KB found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Generate bundle report
+        run: |
+          # Create detailed bundle analysis
+          echo "# Bundle Analysis Report" > bundle-report.md
+          echo "" >> bundle-report.md
+          echo "Generated on: $(date)" >> bundle-report.md
+          echo "" >> bundle-report.md
+
+          echo "## File Structure" >> bundle-report.md
+          echo '```' >> bundle-report.md
+          tree dist/ || find dist -type f | sort >> bundle-report.md
+          echo '```' >> bundle-report.md
+          echo "" >> bundle-report.md
+
+          echo "## Detailed Size Breakdown" >> bundle-report.md
+          echo '```' >> bundle-report.md
+          find dist -type f -exec ls -lh {} \; | sort -k5 -hr >> bundle-report.md
+          echo '```' >> bundle-report.md
+
+      - name: Upload bundle artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-analysis-${{ github.run_number }}
+          path: |
+            dist/
+            bundle-report.md
+          retention-days: 30
+
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [dependency-scan, code-quality, bundle-analysis]
+    if: always()
+
+    steps:
+      - name: Generate security summary
+        run: |
+          echo "## 🔒 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check job results
+          DEPENDENCY_STATUS="${{ needs.dependency-scan.result }}"
+          QUALITY_STATUS="${{ needs.code-quality.result }}"
+          BUNDLE_STATUS="${{ needs.bundle-analysis.result }}"
+
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$DEPENDENCY_STATUS" = "success" ]; then
+            echo "| Dependency Scan | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Dependency Scan | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "$QUALITY_STATUS" = "success" ]; then
+            echo "| Code Quality | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Code Quality | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "$BUNDLE_STATUS" = "success" ]; then
+            echo "| Bundle Analysis | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Bundle Analysis | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Overall status
+          if [ "$DEPENDENCY_STATUS" = "success" ] && [ "$QUALITY_STATUS" = "success" ] && [ "$BUNDLE_STATUS" = "success" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "🎉 **All security and quality checks passed!**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ **Some checks failed. Please review the results above.**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "- Review detailed reports in job artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- Fix any security vulnerabilities or quality issues" >> $GITHUB_STEP_SUMMARY
+          echo "- Monitor bundle size to keep it optimized" >> $GITHUB_STEP_SUMMARY

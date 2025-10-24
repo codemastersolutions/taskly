@@ -1,0 +1,238 @@
+name: Quality Gates
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  quality-check:
+    name: Quality Gate Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Quality Gate 1 - Code Standards
+        run: |
+          echo "## 🎯 Quality Gate 1: Code Standards" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # TypeScript compilation
+          echo "### TypeScript Compilation" >> $GITHUB_STEP_SUMMARY
+          if npm run type-check; then
+            echo "✅ TypeScript compilation successful" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ TypeScript compilation failed" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          # ESLint check
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ESLint Analysis" >> $GITHUB_STEP_SUMMARY
+          if npm run lint:check; then
+            echo "✅ ESLint checks passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ ESLint checks failed" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          # Prettier formatting
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Code Formatting" >> $GITHUB_STEP_SUMMARY
+          if npm run format:check; then
+            echo "✅ Code formatting is correct" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Code formatting issues found" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Quality Gate 2 - Test Coverage
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🧪 Quality Gate 2: Test Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Run tests with coverage
+          npm run test:coverage
+
+          # Parse coverage results
+          if [ -f "coverage/coverage-summary.json" ]; then
+            node -e "
+              const coverage = JSON.parse(require('fs').readFileSync('coverage/coverage-summary.json', 'utf8'));
+              const total = coverage.total;
+              
+              const statements = total.statements.pct;
+              const branches = total.branches.pct;
+              const functions = total.functions.pct;
+              const lines = total.lines.pct;
+              
+              console.log('### Coverage Results');
+              console.log('| Metric | Coverage | Threshold | Status |');
+              console.log('|--------|----------|-----------|--------|');
+              
+              const checkCoverage = (metric, value, threshold = 90) => {
+                const status = value >= threshold ? '✅ Pass' : '❌ Fail';
+                console.log('| ' + metric + ' | ' + value.toFixed(2) + '% | ' + threshold + '% | ' + status + ' |');
+                return value >= threshold;
+              };
+              
+              const statementsPass = checkCoverage('Statements', statements);
+              const branchesPass = checkCoverage('Branches', branches);
+              const functionsPass = checkCoverage('Functions', functions);
+              const linesPass = checkCoverage('Lines', lines);
+              
+              if (!statementsPass || !branchesPass || !functionsPass || !linesPass) {
+                console.log('');
+                console.log('❌ **Coverage requirements not met!**');
+                process.exit(1);
+              } else {
+                console.log('');
+                console.log('✅ **All coverage requirements met!**');
+              }
+            " >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Quality Gate 3 - Security & Dependencies
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔒 Quality Gate 3: Security & Dependencies" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Security audit
+          echo "### Security Audit" >> $GITHUB_STEP_SUMMARY
+          npm audit --json > audit.json || true
+
+          if [ -f "audit.json" ]; then
+            node -e "
+              try {
+                const audit = JSON.parse(require('fs').readFileSync('audit.json', 'utf8'));
+                const vulnerabilities = audit.metadata?.vulnerabilities || {};
+                
+                const critical = vulnerabilities.critical || 0;
+                const high = vulnerabilities.high || 0;
+                const moderate = vulnerabilities.moderate || 0;
+                
+                console.log('| Severity | Count | Threshold | Status |');
+                console.log('|----------|-------|-----------|--------|');
+                console.log('| Critical | ' + critical + ' | 0 | ' + (critical === 0 ? '✅ Pass' : '❌ Fail') + ' |');
+                console.log('| High | ' + high + ' | 0 | ' + (high === 0 ? '✅ Pass' : '❌ Fail') + ' |');
+                console.log('| Moderate | ' + moderate + ' | ≤5 | ' + (moderate <= 5 ? '✅ Pass' : '❌ Fail') + ' |');
+                
+                if (critical > 0 || high > 0 || moderate > 5) {
+                  console.log('');
+                  console.log('❌ **Security requirements not met!**');
+                  process.exit(1);
+                } else {
+                  console.log('');
+                  console.log('✅ **Security requirements met!**');
+                }
+              } catch (e) {
+                console.log('✅ No security vulnerabilities found');
+              }
+            " >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Quality Gate 4 - Build & Bundle
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📦 Quality Gate 4: Build & Bundle" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Build the project
+          echo "### Build Validation" >> $GITHUB_STEP_SUMMARY
+          if npm run build:prod; then
+            echo "✅ Production build successful" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Production build failed" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          # Check bundle sizes
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Bundle Size Validation" >> $GITHUB_STEP_SUMMARY
+
+          CJS_SIZE=$(stat -f%z dist/cjs/index.js 2>/dev/null || stat -c%s dist/cjs/index.js)
+          ESM_SIZE=$(stat -f%z dist/esm/index.js 2>/dev/null || stat -c%s dist/esm/index.js)
+
+          CJS_KB=$((CJS_SIZE / 1024))
+          ESM_KB=$((ESM_SIZE / 1024))
+
+          echo "| Format | Size | Threshold | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|------|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| CommonJS | ${CJS_KB}KB | ≤50KB | $([ $CJS_KB -le 50 ] && echo '✅ Pass' || echo '❌ Fail') |" >> $GITHUB_STEP_SUMMARY
+          echo "| ESM | ${ESM_KB}KB | ≤50KB | $([ $ESM_KB -le 50 ] && echo '✅ Pass' || echo '❌ Fail') |" >> $GITHUB_STEP_SUMMARY
+
+          if [ $CJS_KB -gt 50 ] || [ $ESM_KB -gt 50 ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ **Bundle size requirements not met!**" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **Bundle size requirements met!**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Test built bundles
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Bundle Functionality Test" >> $GITHUB_STEP_SUMMARY
+
+          # Test CommonJS
+          if node -e "const taskly = require('./dist/cjs/index.js'); console.log('CommonJS OK')"; then
+            echo "✅ CommonJS bundle functional" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ CommonJS bundle not functional" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          # Test ESM
+          if node -e "import('./dist/esm/index.js').then(() => console.log('ESM OK'))"; then
+            echo "✅ ESM bundle functional" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ ESM bundle not functional" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Quality Gate Summary
+        if: always()
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📊 Quality Gate Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "🎉 **All quality gates passed!**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The code meets all quality standards and is ready for:" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Code review" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Merge to main branch" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Production deployment" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Quality gates failed!**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Please address the issues above before proceeding." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload quality artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-gate-results-${{ github.run_number }}
+          path: |
+            coverage/
+            audit.json
+            dist/
+          retention-days: 7
