@@ -20,7 +20,7 @@ import {
   getTerminalWidth,
   getTerminalHeight,
   isCI,
-  DEFAULT_COLORS
+  DEFAULT_COLORS,
 } from '../../utils/terminal.js';
 
 describe('Terminal Utils', () => {
@@ -36,7 +36,7 @@ describe('Terminal Utils', () => {
     process.env = originalEnv;
     Object.defineProperty(process, 'stdout', {
       value: originalStdout,
-      writable: true
+      writable: true,
     });
   });
 
@@ -60,7 +60,10 @@ describe('Terminal Utils', () => {
     it('should return false when not in TTY', () => {
       delete process.env.NO_COLOR;
       delete process.env.FORCE_COLOR;
-      Object.defineProperty(process.stdout, 'isTTY', { value: false, configurable: true });
+      Object.defineProperty(process.stdout, 'isTTY', {
+        value: false,
+        configurable: true,
+      });
       expect(supportsColor()).toBe(false);
     });
 
@@ -103,7 +106,7 @@ describe('Terminal Utils', () => {
         const actual = await vi.importActual('../../utils/terminal.js');
         return {
           ...actual,
-          supportsColor: () => true
+          supportsColor: () => true,
         };
       });
 
@@ -274,11 +277,29 @@ describe('Terminal Utils', () => {
   describe('mergeOutputStreams', () => {
     it('should merge and sort streams by timestamp', () => {
       const stream1 = [
-        { identifier: 'test1', content: 'first', type: 'stdout' as const, timestamp: 100, formatted: 'first' },
-        { identifier: 'test1', content: 'third', type: 'stdout' as const, timestamp: 300, formatted: 'third' }
+        {
+          identifier: 'test1',
+          content: 'first',
+          type: 'stdout' as const,
+          timestamp: 100,
+          formatted: 'first',
+        },
+        {
+          identifier: 'test1',
+          content: 'third',
+          type: 'stdout' as const,
+          timestamp: 300,
+          formatted: 'third',
+        },
       ];
       const stream2 = [
-        { identifier: 'test2', content: 'second', type: 'stdout' as const, timestamp: 200, formatted: 'second' }
+        {
+          identifier: 'test2',
+          content: 'second',
+          type: 'stdout' as const,
+          timestamp: 200,
+          formatted: 'second',
+        },
       ];
 
       const result = mergeOutputStreams([stream1, stream2]);
@@ -296,7 +317,10 @@ describe('Terminal Utils', () => {
     });
 
     it('should return default when columns not available', () => {
-      Object.defineProperty(process.stdout, 'columns', { value: undefined, configurable: true });
+      Object.defineProperty(process.stdout, 'columns', {
+        value: undefined,
+        configurable: true,
+      });
       expect(getTerminalWidth()).toBe(80);
     });
   });
@@ -308,7 +332,10 @@ describe('Terminal Utils', () => {
     });
 
     it('should return default when rows not available', () => {
-      Object.defineProperty(process.stdout, 'rows', { value: undefined, configurable: true });
+      Object.defineProperty(process.stdout, 'rows', {
+        value: undefined,
+        configurable: true,
+      });
       expect(getTerminalHeight()).toBe(24);
     });
   });

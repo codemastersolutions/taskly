@@ -39,10 +39,10 @@ function runCommand(command, args = [], options = {}) {
     const child = spawn(command, args, {
       stdio: 'inherit',
       shell: true,
-      ...options
+      ...options,
     });
 
-    child.on('close', (code) => {
+    child.on('close', code => {
       if (code === 0) {
         resolve(code);
       } else {
@@ -50,15 +50,19 @@ function runCommand(command, args = [], options = {}) {
       }
     });
 
-    child.on('error', (error) => {
+    child.on('error', error => {
       reject(error);
     });
   });
 }
 
 async function checkCoverageThresholds() {
-  const coverageFile = path.join(process.cwd(), 'coverage', 'coverage-summary.json');
-  
+  const coverageFile = path.join(
+    process.cwd(),
+    'coverage',
+    'coverage-summary.json'
+  );
+
   if (!fs.existsSync(coverageFile)) {
     log('Coverage summary not found, skipping threshold check', 'yellow');
     return true;
@@ -67,36 +71,39 @@ async function checkCoverageThresholds() {
   try {
     const coverage = JSON.parse(fs.readFileSync(coverageFile, 'utf8'));
     const total = coverage.total;
-    
+
     const thresholds = {
       statements: 90,
       branches: 90,
       functions: 90,
-      lines: 90
+      lines: 90,
     };
 
     let passed = true;
-    
+
     logSection('Coverage Threshold Check');
-    
+
     for (const [metric, threshold] of Object.entries(thresholds)) {
       const actual = total[metric].pct;
       const status = actual >= threshold ? 'PASS' : 'FAIL';
       const color = actual >= threshold ? 'green' : 'red';
-      
-      log(`${metric.padEnd(12)}: ${actual.toFixed(2)}% (threshold: ${threshold}%) - ${colorize(status, color)}`, color);
-      
+
+      log(
+        `${metric.padEnd(12)}: ${actual.toFixed(2)}% (threshold: ${threshold}%) - ${colorize(status, color)}`,
+        color
+      );
+
       if (actual < threshold) {
         passed = false;
       }
     }
-    
+
     if (passed) {
       log('\n✅ All coverage thresholds passed!', 'green');
     } else {
       log('\n❌ Some coverage thresholds failed!', 'red');
     }
-    
+
     return passed;
   } catch (error) {
     log(`Error reading coverage file: ${error.message}`, 'red');
@@ -107,7 +114,7 @@ async function checkCoverageThresholds() {
 async function generateTestReport() {
   const reportDir = path.join(process.cwd(), 'coverage');
   const testResultsFile = path.join(reportDir, 'test-results.json');
-  
+
   if (!fs.existsSync(testResultsFile)) {
     log('Test results file not found', 'yellow');
     return;
@@ -115,15 +122,21 @@ async function generateTestReport() {
 
   try {
     const results = JSON.parse(fs.readFileSync(testResultsFile, 'utf8'));
-    
+
     logSection('Test Results Summary');
-    
+
     log(`Total Tests: ${results.numTotalTests || 0}`, 'blue');
     log(`Passed: ${colorize(results.numPassedTests || 0, 'green')}`, 'green');
     log(`Failed: ${colorize(results.numFailedTests || 0, 'red')}`, 'red');
-    log(`Skipped: ${colorize(results.numPendingTests || 0, 'yellow')}`, 'yellow');
-    log(`Duration: ${results.testResults ? results.testResults.reduce((acc, r) => acc + (r.perfStats?.runtime || 0), 0) : 0}ms`, 'cyan');
-    
+    log(
+      `Skipped: ${colorize(results.numPendingTests || 0, 'yellow')}`,
+      'yellow'
+    );
+    log(
+      `Duration: ${results.testResults ? results.testResults.reduce((acc, r) => acc + (r.perfStats?.runtime || 0), 0) : 0}ms`,
+      'cyan'
+    );
+
     if (results.numFailedTests > 0) {
       log('\n❌ Some tests failed!', 'red');
       return false;
@@ -142,28 +155,28 @@ async function runTests(mode = 'default') {
     default: {
       command: 'npm',
       args: ['run', 'test'],
-      description: 'Run tests once'
+      description: 'Run tests once',
     },
     coverage: {
       command: 'npm',
       args: ['run', 'test:coverage'],
-      description: 'Run tests with coverage'
+      description: 'Run tests with coverage',
     },
     ci: {
       command: 'npm',
       args: ['run', 'test:ci'],
-      description: 'Run tests in CI mode'
+      description: 'Run tests in CI mode',
     },
     watch: {
       command: 'npm',
       args: ['run', 'test:watch'],
-      description: 'Run tests in watch mode'
+      description: 'Run tests in watch mode',
     },
     verbose: {
       command: 'npm',
       args: ['run', 'test:verbose'],
-      description: 'Run tests with verbose output'
-    }
+      description: 'Run tests with verbose output',
+    },
   };
 
   const config = modes[mode];
@@ -174,7 +187,7 @@ async function runTests(mode = 'default') {
   }
 
   logSection(`Running Tests - ${config.description}`);
-  
+
   try {
     await runCommand(config.command, config.args);
     log('✅ Tests completed successfully', 'green');
@@ -187,11 +200,11 @@ async function runTests(mode = 'default') {
 
 async function runQualityChecks() {
   logSection('Quality Checks');
-  
+
   const checks = [
     { name: 'Type Check', command: 'npm', args: ['run', 'type-check'] },
     { name: 'Linting', command: 'npm', args: ['run', 'lint:check'] },
-    { name: 'Formatting', command: 'npm', args: ['run', 'format:check'] }
+    { name: 'Formatting', command: 'npm', args: ['run', 'format:check'] },
   ];
 
   let allPassed = true;
@@ -217,7 +230,7 @@ async function main() {
     skipQuality: args.includes('--skip-quality'),
     skipCoverage: args.includes('--skip-coverage'),
     failFast: args.includes('--fail-fast'),
-    generateReport: args.includes('--report') || mode === 'ci'
+    generateReport: args.includes('--report') || mode === 'ci',
   };
 
   log(colorize('🧪 Taskly Test Automation', 'bright'));
@@ -274,7 +287,6 @@ async function main() {
     } else {
       log('💥 Some checks failed!', 'red');
     }
-
   } catch (error) {
     log(`💥 Unexpected error: ${error.message}`, 'red');
     exitCode = 1;
@@ -312,7 +324,7 @@ Examples:
     process.exit(0);
   }
 
-  main().catch((error) => {
+  main().catch(error => {
     console.error('Fatal error:', error);
     process.exit(1);
   });
@@ -322,5 +334,5 @@ module.exports = {
   runTests,
   runQualityChecks,
   checkCoverageThresholds,
-  generateTestReport
+  generateTestReport,
 };

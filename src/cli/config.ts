@@ -5,13 +5,25 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { resolve, extname } from 'path';
-import { TasklyConfig, TasklyError, ERROR_CODES, CLIOptions, TaskConfig } from '../types/index.js';
+import {
+  TasklyConfig,
+  TasklyError,
+  ERROR_CODES,
+  CLIOptions,
+  TaskConfig,
+} from '../types/index.js';
 
 /**
  * Configuration loader class
  */
 export class ConfigLoader {
-  private readonly supportedExtensions = ['.json', '.yaml', '.yml', '.js', '.mjs'];
+  private readonly supportedExtensions = [
+    '.json',
+    '.yaml',
+    '.yml',
+    '.js',
+    '.mjs',
+  ];
   private readonly defaultConfigNames = [
     'taskly.config.json',
     'taskly.config.yaml',
@@ -22,15 +34,18 @@ export class ConfigLoader {
     '.tasklyrc.yaml',
     '.tasklyrc.yml',
     '.tasklyrc.js',
-    '.tasklyrc.mjs'
+    '.tasklyrc.mjs',
   ];
 
   /**
    * Load configuration from file or auto-discover
    */
-  async loadConfig(configPath?: string, cwd: string = process.cwd()): Promise<TasklyConfig | null> {
+  async loadConfig(
+    configPath?: string,
+    cwd: string = process.cwd()
+  ): Promise<TasklyConfig | null> {
     try {
-      const resolvedPath = configPath 
+      const resolvedPath = configPath
         ? this.resolveConfigPath(configPath, cwd)
         : this.findConfigFile(cwd);
 
@@ -43,7 +58,7 @@ export class ConfigLoader {
       if (error instanceof TasklyError) {
         throw error;
       }
-      
+
       throw new TasklyError(
         `Failed to load configuration: ${error instanceof Error ? error.message : String(error)}`,
         ERROR_CODES.CONFIG_ERROR,
@@ -56,10 +71,13 @@ export class ConfigLoader {
   /**
    * Merge CLI options with configuration and environment variables
    */
-  mergeWithCLIOptions(config: TasklyConfig | null, cliOptions: CLIOptions): CLIOptions {
+  mergeWithCLIOptions(
+    config: TasklyConfig | null,
+    cliOptions: CLIOptions
+  ): CLIOptions {
     // Start with environment variables as base
     const envOptions = this.loadEnvironmentVariables();
-    
+
     // Merge in order: env -> config -> CLI (CLI has highest priority)
     const merged: CLIOptions = { ...cliOptions };
 
@@ -69,15 +87,24 @@ export class ConfigLoader {
         merged.packageManager = config.packageManager;
       }
 
-      if (merged.killOthersOnFail === undefined && config.killOthersOnFail !== undefined) {
+      if (
+        merged.killOthersOnFail === undefined &&
+        config.killOthersOnFail !== undefined
+      ) {
         merged.killOthersOnFail = config.killOthersOnFail;
       }
 
-      if (merged.maxConcurrency === undefined && config.maxConcurrency !== undefined) {
+      if (
+        merged.maxConcurrency === undefined &&
+        config.maxConcurrency !== undefined
+      ) {
         merged.maxConcurrency = config.maxConcurrency;
       }
 
-      if (merged.verbose === undefined && config.options?.verbose !== undefined) {
+      if (
+        merged.verbose === undefined &&
+        config.options?.verbose !== undefined
+      ) {
         merged.verbose = config.options.verbose;
       }
 
@@ -92,11 +119,17 @@ export class ConfigLoader {
       merged.packageManager = envOptions.packageManager;
     }
 
-    if (merged.killOthersOnFail === undefined && envOptions.killOthersOnFail !== undefined) {
+    if (
+      merged.killOthersOnFail === undefined &&
+      envOptions.killOthersOnFail !== undefined
+    ) {
       merged.killOthersOnFail = envOptions.killOthersOnFail;
     }
 
-    if (merged.maxConcurrency === undefined && envOptions.maxConcurrency !== undefined) {
+    if (
+      merged.maxConcurrency === undefined &&
+      envOptions.maxConcurrency !== undefined
+    ) {
       merged.maxConcurrency = envOptions.maxConcurrency;
     }
 
@@ -136,7 +169,9 @@ export class ConfigLoader {
 
     // TASKLY_KILL_OTHERS_ON_FAIL
     if (env.TASKLY_KILL_OTHERS_ON_FAIL) {
-      options.killOthersOnFail = this.parseBoolean(env.TASKLY_KILL_OTHERS_ON_FAIL);
+      options.killOthersOnFail = this.parseBoolean(
+        env.TASKLY_KILL_OTHERS_ON_FAIL
+      );
     }
 
     // TASKLY_MAX_CONCURRENCY
@@ -159,12 +194,16 @@ export class ConfigLoader {
 
     // TASKLY_COLORS
     if (env.TASKLY_COLORS) {
-      options.colors = env.TASKLY_COLORS.split(',').map(c => c.trim()).filter(Boolean);
+      options.colors = env.TASKLY_COLORS.split(',')
+        .map(c => c.trim())
+        .filter(Boolean);
     }
 
     // TASKLY_NAMES
     if (env.TASKLY_NAMES) {
-      options.names = env.TASKLY_NAMES.split(',').map(n => n.trim()).filter(Boolean);
+      options.names = env.TASKLY_NAMES.split(',')
+        .map(n => n.trim())
+        .filter(Boolean);
     }
 
     return options;
@@ -190,14 +229,15 @@ export class ConfigLoader {
     const taskEntries = Object.entries(config.tasks);
 
     // If specific task names are provided, filter to those
-    const filteredEntries = taskNames && taskNames.length > 0
-      ? taskEntries.filter(([name]) => taskNames.includes(name))
-      : taskEntries;
+    const filteredEntries =
+      taskNames && taskNames.length > 0
+        ? taskEntries.filter(([name]) => taskNames.includes(name))
+        : taskEntries;
 
     for (const [name, taskConfig] of filteredEntries) {
       tasks.push({
         ...taskConfig,
-        identifier: taskConfig.identifier || name
+        identifier: taskConfig.identifier || name,
       });
     }
 
@@ -209,7 +249,7 @@ export class ConfigLoader {
    */
   private resolveConfigPath(configPath: string, cwd: string): string {
     const resolved = resolve(cwd, configPath);
-    
+
     if (!existsSync(resolved)) {
       throw new TasklyError(
         `Configuration file not found: ${resolved}`,
@@ -250,15 +290,15 @@ export class ConfigLoader {
     switch (ext) {
       case '.json':
         return this.parseJSONConfig(configPath);
-      
+
       case '.yaml':
       case '.yml':
         return this.parseYAMLConfig(configPath);
-      
+
       case '.js':
       case '.mjs':
         return await this.parseJSConfig(configPath);
-      
+
       default:
         throw new TasklyError(
           `Unsupported configuration file extension: ${ext}`,
@@ -316,7 +356,9 @@ export class ConfigLoader {
   private parseSimpleYAML(content: string): any {
     const lines = content.split('\n').map(line => line.replace(/\r$/, ''));
     const result: any = {};
-    const stack: Array<{ obj: any; indent: number; isArray?: boolean }> = [{ obj: result, indent: -1 }];
+    const stack: Array<{ obj: any; indent: number; isArray?: boolean }> = [
+      { obj: result, indent: -1 },
+    ];
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -346,7 +388,7 @@ export class ConfigLoader {
           // Object key - check if next line is an array
           const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
           const nextTrimmed = nextLine.trim();
-          
+
           if (nextTrimmed.startsWith('- ')) {
             // This is an array
             const newArray: any[] = [];
@@ -365,11 +407,13 @@ export class ConfigLoader {
       } else if (trimmed.startsWith('- ')) {
         // Array item
         const value = trimmed.substring(2).trim();
-        
+
         if (!parent.isArray && !Array.isArray(parent.obj)) {
-          throw new Error(`Invalid YAML: array item without array context at line ${i + 1}`);
+          throw new Error(
+            `Invalid YAML: array item without array context at line ${i + 1}`
+          );
         }
-        
+
         if (value.includes(':')) {
           // Object in array
           const obj = {};
@@ -393,14 +437,19 @@ export class ConfigLoader {
    */
   private parseYAMLValue(value: string): any {
     // Handle quoted strings
-    if ((value.startsWith('"') && value.endsWith('"')) || 
-        (value.startsWith("'") && value.endsWith("'"))) {
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
       return value.slice(1, -1);
     }
 
     // Handle arrays
     if (value.startsWith('[') && value.endsWith(']')) {
-      const items = value.slice(1, -1).split(',').map(item => item.trim());
+      const items = value
+        .slice(1, -1)
+        .split(',')
+        .map(item => item.trim());
       return items.map(item => this.parseYAMLValue(item));
     }
 
@@ -462,7 +511,10 @@ export class ConfigLoader {
 
     // Validate maxConcurrency if specified
     if (config.maxConcurrency !== undefined) {
-      if (typeof config.maxConcurrency !== 'number' || config.maxConcurrency <= 0) {
+      if (
+        typeof config.maxConcurrency !== 'number' ||
+        config.maxConcurrency <= 0
+      ) {
         throw new TasklyError(
           `maxConcurrency must be a positive number: ${config.maxConcurrency}`,
           ERROR_CODES.CONFIG_ERROR
@@ -471,7 +523,10 @@ export class ConfigLoader {
     }
 
     // Validate killOthersOnFail if specified
-    if (config.killOthersOnFail !== undefined && typeof config.killOthersOnFail !== 'boolean') {
+    if (
+      config.killOthersOnFail !== undefined &&
+      typeof config.killOthersOnFail !== 'boolean'
+    ) {
       throw new TasklyError(
         `killOthersOnFail must be a boolean: ${config.killOthersOnFail}`,
         ERROR_CODES.CONFIG_ERROR
@@ -507,7 +562,11 @@ export class ConfigLoader {
   /**
    * Validate individual task configuration
    */
-  private validateTaskConfig(taskName: string, taskConfig: any, configPath: string): void {
+  private validateTaskConfig(
+    taskName: string,
+    taskConfig: any,
+    configPath: string
+  ): void {
     if (!taskConfig || typeof taskConfig !== 'object') {
       throw new TasklyError(
         `Task "${taskName}" must be an object: ${configPath}`,
@@ -545,7 +604,7 @@ export class ConfigLoader {
    */
   loadPackageJsonConfig(cwd: string = process.cwd()): TasklyConfig | null {
     const packageJsonPath = resolve(cwd, 'package.json');
-    
+
     if (!existsSync(packageJsonPath)) {
       return null;
     }
@@ -553,11 +612,11 @@ export class ConfigLoader {
     try {
       const content = readFileSync(packageJsonPath, 'utf-8');
       const packageJson = JSON.parse(content);
-      
+
       if (packageJson.taskly) {
         return this.validateConfig(packageJson.taskly, packageJsonPath);
       }
-      
+
       return null;
     } catch (error) {
       // Silently ignore package.json parsing errors for taskly config
@@ -582,28 +641,28 @@ export class ConfigLoader {
         dev: {
           command: 'npm run dev',
           identifier: 'development',
-          color: 'blue'
+          color: 'blue',
         },
         test: {
           command: 'npm run test:watch',
           identifier: 'testing',
-          color: 'green'
+          color: 'green',
         },
         lint: {
           command: 'npm run lint:watch',
           identifier: 'linting',
-          color: 'yellow'
+          color: 'yellow',
         },
         build: {
           command: 'npm run build',
           identifier: 'building',
           color: 'magenta',
-          packageManager: 'yarn'
-        }
+          packageManager: 'yarn',
+        },
       },
       options: {
-        verbose: false
-      }
+        verbose: false,
+      },
     };
 
     return {
@@ -613,7 +672,7 @@ export class ConfigLoader {
 export default ${JSON.stringify(exampleConfig, null, 2)};
 
 // Or using CommonJS:
-// module.exports = ${JSON.stringify(exampleConfig, null, 2)};`
+// module.exports = ${JSON.stringify(exampleConfig, null, 2)};`,
     };
   }
 
@@ -655,7 +714,10 @@ export default ${JSON.stringify(exampleConfig, null, 2)};
 /**
  * Load configuration with default loader
  */
-export async function loadConfig(configPath?: string, cwd?: string): Promise<TasklyConfig | null> {
+export async function loadConfig(
+  configPath?: string,
+  cwd?: string
+): Promise<TasklyConfig | null> {
   const loader = new ConfigLoader();
   return loader.loadConfig(configPath, cwd);
 }
@@ -663,7 +725,10 @@ export async function loadConfig(configPath?: string, cwd?: string): Promise<Tas
 /**
  * Merge configuration with CLI options
  */
-export function mergeConfig(config: TasklyConfig | null, cliOptions: CLIOptions): CLIOptions {
+export function mergeConfig(
+  config: TasklyConfig | null,
+  cliOptions: CLIOptions
+): CLIOptions {
   const loader = new ConfigLoader();
   return loader.mergeWithCLIOptions(config, cliOptions);
 }

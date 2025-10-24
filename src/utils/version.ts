@@ -84,7 +84,7 @@ export function parseConventionalCommit(
   const firstLine = lines[0];
 
   const match = firstLine.match(CONVENTIONAL_COMMIT_REGEX);
-  if (!match || !match.groups) {
+  if (!match?.groups) {
     return null;
   }
 

@@ -18,7 +18,7 @@ describe('ColorManager', () => {
     it('should initialize with custom colors', () => {
       const customColors: Color[] = ['red', 'blue', 'green'];
       const manager = new ColorManager(customColors);
-      
+
       const assignment1 = manager.assignColor('task1');
       const assignment2 = manager.assignColor('task2');
       const assignment3 = manager.assignColor('task3');
@@ -33,7 +33,7 @@ describe('ColorManager', () => {
     it('should filter out invalid custom colors', () => {
       const mixedColors = ['red', 'invalid-color', 'blue', 'another-invalid'];
       const manager = new ColorManager(mixedColors);
-      
+
       const assignment1 = manager.assignColor('task1');
       const assignment2 = manager.assignColor('task2');
       const assignment3 = manager.assignColor('task3');
@@ -53,11 +53,11 @@ describe('ColorManager', () => {
       expect(assignment1.identifier).toBe('task1');
       expect(assignment2.identifier).toBe('task2');
       expect(assignment3.identifier).toBe('task3');
-      
+
       expect(assignment1.color).toBe('red');
       expect(assignment2.color).toBe('green');
       expect(assignment3.color).toBe('yellow');
-      
+
       expect(assignment1.ansiCode).toBe('\x1b[31m');
       expect(assignment2.ansiCode).toBe('\x1b[32m');
       expect(assignment3.ansiCode).toBe('\x1b[33m');
@@ -65,7 +65,7 @@ describe('ColorManager', () => {
 
     it('should cycle through colors when more tasks than colors', () => {
       const customManager = new ColorManager(['red', 'blue']);
-      
+
       const assignment1 = customManager.assignColor('task1');
       const assignment2 = customManager.assignColor('task2');
       const assignment3 = customManager.assignColor('task3');
@@ -141,20 +141,30 @@ describe('ColorManager', () => {
   describe('formatOutputLine', () => {
     it('should format output line with color and default prefix', () => {
       colorManager.assignColor('task1', 'green');
-      const formatted = colorManager.formatOutputLine('task1', 'Output message');
+      const formatted = colorManager.formatOutputLine(
+        'task1',
+        'Output message'
+      );
 
       expect(formatted).toBe('\x1b[32m[task1]\x1b[0m Output message');
     });
 
     it('should format output line with custom prefix', () => {
       colorManager.assignColor('task1', 'blue');
-      const formatted = colorManager.formatOutputLine('task1', 'Output message', 'custom-prefix');
+      const formatted = colorManager.formatOutputLine(
+        'task1',
+        'Output message',
+        'custom-prefix'
+      );
 
       expect(formatted).toBe('\x1b[34m[custom-prefix]\x1b[0m Output message');
     });
 
     it('should return unformatted line for unassigned identifier', () => {
-      const formatted = colorManager.formatOutputLine('nonexistent', 'Output message');
+      const formatted = colorManager.formatOutputLine(
+        'nonexistent',
+        'Output message'
+      );
       expect(formatted).toBe('Output message');
     });
   });
@@ -177,7 +187,10 @@ describe('ColorManager', () => {
     });
 
     it('should assign valid rgb color', () => {
-      const assignment = colorManager.assignCustomColor('task1', 'rgb(0,255,0)');
+      const assignment = colorManager.assignCustomColor(
+        'task1',
+        'rgb(0,255,0)'
+      );
 
       expect(assignment.identifier).toBe('task1');
       expect(assignment.color).toBe('rgb(0,255,0)');
@@ -185,9 +198,9 @@ describe('ColorManager', () => {
     });
 
     it('should throw error for invalid color', () => {
-      expect(() => colorManager.assignCustomColor('task1', 'invalid-color')).toThrow(
-        'Invalid color format: invalid-color'
-      );
+      expect(() =>
+        colorManager.assignCustomColor('task1', 'invalid-color')
+      ).toThrow('Invalid color format: invalid-color');
     });
 
     it('should throw error for invalid hex color', () => {
@@ -197,9 +210,9 @@ describe('ColorManager', () => {
     });
 
     it('should throw error for invalid rgb color', () => {
-      expect(() => colorManager.assignCustomColor('task1', 'rgb(256,0,0)')).toThrow(
-        'Invalid color format: rgb(256,0,0)'
-      );
+      expect(() =>
+        colorManager.assignCustomColor('task1', 'rgb(256,0,0)')
+      ).toThrow('Invalid color format: rgb(256,0,0)');
     });
   });
 
@@ -207,7 +220,7 @@ describe('ColorManager', () => {
     it('should clear all assignments and reset color index', () => {
       colorManager.assignColor('task1');
       colorManager.assignColor('task2');
-      
+
       expect(colorManager.getAssignment('task1')).toBeDefined();
       expect(colorManager.getAssignment('task2')).toBeDefined();
 
@@ -230,8 +243,12 @@ describe('ColorManager', () => {
       const assignments = colorManager.getAllAssignments();
 
       expect(assignments).toHaveLength(2);
-      expect(assignments.find(a => a.identifier === 'task1')?.color).toBe('red');
-      expect(assignments.find(a => a.identifier === 'task2')?.color).toBe('blue');
+      expect(assignments.find(a => a.identifier === 'task1')?.color).toBe(
+        'red'
+      );
+      expect(assignments.find(a => a.identifier === 'task2')?.color).toBe(
+        'blue'
+      );
     });
 
     it('should return empty array when no assignments', () => {
@@ -290,8 +307,12 @@ describe('ColorManager', () => {
     describe('parseRgbColor', () => {
       it('should parse valid rgb colors', () => {
         expect(ColorManager.parseRgbColor('rgb(255,0,0)')).toEqual([255, 0, 0]);
-        expect(ColorManager.parseRgbColor('rgb(0, 255, 0)')).toEqual([0, 255, 0]);
-        expect(ColorManager.parseRgbColor('rgb(100, 150, 200)')).toEqual([100, 150, 200]);
+        expect(ColorManager.parseRgbColor('rgb(0, 255, 0)')).toEqual([
+          0, 255, 0,
+        ]);
+        expect(ColorManager.parseRgbColor('rgb(100, 150, 200)')).toEqual([
+          100, 150, 200,
+        ]);
       });
 
       it('should return null for invalid rgb colors', () => {
@@ -318,7 +339,7 @@ describe('ColorManager', () => {
     describe('getColorNameMapping', () => {
       it('should return all predefined color mappings', () => {
         const mapping = ColorManager.getColorNameMapping();
-        
+
         expect(mapping.red).toBe('\x1b[31m');
         expect(mapping.green).toBe('\x1b[32m');
         expect(mapping.brightRed).toBe('\x1b[91m');
@@ -337,7 +358,7 @@ describe('ColorManager', () => {
     describe('getAvailableColors', () => {
       it('should return all available color names', () => {
         const colors = ColorManager.getAvailableColors();
-        
+
         expect(colors).toContain('red');
         expect(colors).toContain('green');
         expect(colors).toContain('brightMagenta');

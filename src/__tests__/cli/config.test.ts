@@ -16,7 +16,7 @@ describe('ConfigLoader', () => {
   beforeEach(() => {
     loader = new ConfigLoader();
     tempDir = resolve(process.cwd(), 'test-temp');
-    
+
     // Create temp directory
     if (!existsSync(tempDir)) {
       mkdirSync(tempDir, { recursive: true });
@@ -47,9 +47,9 @@ describe('ConfigLoader', () => {
         tasks: {
           dev: {
             command: 'yarn dev',
-            identifier: 'development'
-          }
-        }
+            identifier: 'development',
+          },
+        },
       };
 
       writeFileSync(configPath, JSON.stringify(config, null, 2));
@@ -62,13 +62,17 @@ describe('ConfigLoader', () => {
       const configPath = resolve(tempDir, 'invalid.json');
       writeFileSync(configPath, '{ invalid json }');
 
-      await expect(loader.loadConfig(configPath))
-        .rejects.toThrow('Invalid JSON in configuration file');
+      await expect(loader.loadConfig(configPath)).rejects.toThrow(
+        'Invalid JSON in configuration file'
+      );
     });
 
     it('should auto-discover configuration files', async () => {
       const config = { packageManager: 'npm' };
-      writeFileSync(resolve(tempDir, 'taskly.config.json'), JSON.stringify(config));
+      writeFileSync(
+        resolve(tempDir, 'taskly.config.json'),
+        JSON.stringify(config)
+      );
 
       const result = await loader.loadConfig(undefined, tempDir);
       expect(result).toEqual(config);
@@ -106,13 +110,13 @@ tasks:
         tasks: {
           dev: {
             command: 'yarn dev',
-            identifier: 'development'
+            identifier: 'development',
           },
           test: {
             command: 'yarn test',
-            color: 'green'
-          }
-        }
+            color: 'green',
+          },
+        },
       });
     });
 
@@ -136,18 +140,22 @@ arrayValue: [1, 2, 3]
         booleanTrue: true,
         booleanFalse: false,
         nullValue: null,
-        arrayValue: [1, 2, 3]
+        arrayValue: [1, 2, 3],
       });
     });
 
     it('should throw error for invalid YAML', async () => {
       const configPath = resolve(tempDir, 'invalid.yaml');
-      writeFileSync(configPath, `invalid:
+      writeFileSync(
+        configPath,
+        `invalid:
 - item1
-  - nested without parent array`);
+  - nested without parent array`
+      );
 
-      await expect(loader.loadConfig(configPath))
-        .rejects.toThrow('Invalid YAML in configuration file');
+      await expect(loader.loadConfig(configPath)).rejects.toThrow(
+        'Invalid YAML in configuration file'
+      );
     });
   });
 
@@ -174,9 +182,9 @@ export default {
         killOthersOnFail: false,
         tasks: {
           build: {
-            command: 'pnpm build'
-          }
-        }
+            command: 'pnpm build',
+          },
+        },
       });
     });
   });
@@ -187,8 +195,9 @@ export default {
       const config = { packageManager: 'invalid-pm' };
       writeFileSync(configPath, JSON.stringify(config));
 
-      await expect(loader.loadConfig(configPath))
-        .rejects.toThrow('Invalid package manager in config: invalid-pm');
+      await expect(loader.loadConfig(configPath)).rejects.toThrow(
+        'Invalid package manager in config: invalid-pm'
+      );
     });
 
     it('should validate maxConcurrency', async () => {
@@ -196,8 +205,9 @@ export default {
       const config = { maxConcurrency: -1 };
       writeFileSync(configPath, JSON.stringify(config));
 
-      await expect(loader.loadConfig(configPath))
-        .rejects.toThrow('maxConcurrency must be a positive number');
+      await expect(loader.loadConfig(configPath)).rejects.toThrow(
+        'maxConcurrency must be a positive number'
+      );
     });
 
     it('should validate killOthersOnFail type', async () => {
@@ -205,8 +215,9 @@ export default {
       const config = { killOthersOnFail: 'yes' };
       writeFileSync(configPath, JSON.stringify(config));
 
-      await expect(loader.loadConfig(configPath))
-        .rejects.toThrow('killOthersOnFail must be a boolean');
+      await expect(loader.loadConfig(configPath)).rejects.toThrow(
+        'killOthersOnFail must be a boolean'
+      );
     });
 
     it('should validate colors is array', async () => {
@@ -214,8 +225,9 @@ export default {
       const config = { colors: 'blue,green' };
       writeFileSync(configPath, JSON.stringify(config));
 
-      await expect(loader.loadConfig(configPath))
-        .rejects.toThrow('colors must be an array');
+      await expect(loader.loadConfig(configPath)).rejects.toThrow(
+        'colors must be an array'
+      );
     });
 
     it('should validate task structure', async () => {
@@ -224,14 +236,15 @@ export default {
         tasks: {
           dev: {
             // Missing command
-            identifier: 'dev'
-          }
-        }
+            identifier: 'dev',
+          },
+        },
       };
       writeFileSync(configPath, JSON.stringify(config));
 
-      await expect(loader.loadConfig(configPath))
-        .rejects.toThrow('Task "dev" must have a command string');
+      await expect(loader.loadConfig(configPath)).rejects.toThrow(
+        'Task "dev" must have a command string'
+      );
     });
 
     it('should validate task package manager', async () => {
@@ -240,78 +253,79 @@ export default {
         tasks: {
           dev: {
             command: 'dev',
-            packageManager: 'invalid'
-          }
-        }
+            packageManager: 'invalid',
+          },
+        },
       };
       writeFileSync(configPath, JSON.stringify(config));
 
-      await expect(loader.loadConfig(configPath))
-        .rejects.toThrow('Invalid package manager for task "dev": invalid');
+      await expect(loader.loadConfig(configPath)).rejects.toThrow(
+        'Invalid package manager for task "dev": invalid'
+      );
     });
   });
 
   describe('environment variable loading', () => {
     it('should load package manager from environment', () => {
       process.env.TASKLY_PACKAGE_MANAGER = 'yarn';
-      
+
       const cliOptions: CLIOptions = { commands: ['test'] };
       const result = loader.mergeWithCLIOptions(null, cliOptions);
-      
+
       expect(result.packageManager).toBe('yarn');
     });
 
     it('should load kill others on fail from environment', () => {
       process.env.TASKLY_KILL_OTHERS_ON_FAIL = 'true';
-      
+
       const cliOptions: CLIOptions = { commands: ['test'] };
       const result = loader.mergeWithCLIOptions(null, cliOptions);
-      
+
       expect(result.killOthersOnFail).toBe(true);
     });
 
     it('should load max concurrency from environment', () => {
       process.env.TASKLY_MAX_CONCURRENCY = '8';
-      
+
       const cliOptions: CLIOptions = { commands: ['test'] };
       const result = loader.mergeWithCLIOptions(null, cliOptions);
-      
+
       expect(result.maxConcurrency).toBe(8);
     });
 
     it('should load verbose from environment', () => {
       process.env.TASKLY_VERBOSE = '1';
-      
+
       const cliOptions: CLIOptions = { commands: ['test'] };
       const result = loader.mergeWithCLIOptions(null, cliOptions);
-      
+
       expect(result.verbose).toBe(true);
     });
 
     it('should load config path from environment', () => {
       process.env.TASKLY_CONFIG = 'my-config.json';
-      
+
       const cliOptions: CLIOptions = { commands: ['test'] };
       const result = loader.mergeWithCLIOptions(null, cliOptions);
-      
+
       expect(result.config).toBe('my-config.json');
     });
 
     it('should load colors from environment', () => {
       process.env.TASKLY_COLORS = 'blue,green,red';
-      
+
       const cliOptions: CLIOptions = { commands: ['test'] };
       const result = loader.mergeWithCLIOptions(null, cliOptions);
-      
+
       expect(result.colors).toEqual(['blue', 'green', 'red']);
     });
 
     it('should load names from environment', () => {
       process.env.TASKLY_NAMES = 'dev,test,build';
-      
+
       const cliOptions: CLIOptions = { commands: ['test'] };
       const result = loader.mergeWithCLIOptions(null, cliOptions);
-      
+
       expect(result.names).toEqual(['dev', 'test', 'build']);
     });
 
@@ -326,34 +340,34 @@ export default {
         { value: '0', expected: false },
         { value: 'no', expected: false },
         { value: 'off', expected: false },
-        { value: 'disabled', expected: false }
+        { value: 'disabled', expected: false },
       ];
 
       for (const testCase of testCases) {
         process.env.TASKLY_VERBOSE = testCase.value;
-        
+
         const cliOptions: CLIOptions = { commands: ['test'] };
         const result = loader.mergeWithCLIOptions(null, cliOptions);
-        
+
         expect(result.verbose).toBe(testCase.expected);
       }
     });
 
     it('should ignore invalid package manager from environment', () => {
       process.env.TASKLY_PACKAGE_MANAGER = 'invalid';
-      
+
       const cliOptions: CLIOptions = { commands: ['test'] };
       const result = loader.mergeWithCLIOptions(null, cliOptions);
-      
+
       expect(result.packageManager).toBeUndefined();
     });
 
     it('should ignore invalid max concurrency from environment', () => {
       process.env.TASKLY_MAX_CONCURRENCY = 'invalid';
-      
+
       const cliOptions: CLIOptions = { commands: ['test'] };
       const result = loader.mergeWithCLIOptions(null, cliOptions);
-      
+
       expect(result.maxConcurrency).toBeUndefined();
     });
   });
@@ -361,32 +375,32 @@ export default {
   describe('configuration merging priority', () => {
     it('should prioritize CLI options over config and environment', () => {
       process.env.TASKLY_PACKAGE_MANAGER = 'npm';
-      
+
       const config = { packageManager: 'yarn' as const };
-      const cliOptions: CLIOptions = { 
+      const cliOptions: CLIOptions = {
         commands: ['test'],
-        packageManager: 'pnpm'
+        packageManager: 'pnpm',
       };
-      
+
       const result = loader.mergeWithCLIOptions(config, cliOptions);
       expect(result.packageManager).toBe('pnpm'); // CLI wins
     });
 
     it('should prioritize config over environment when CLI not set', () => {
       process.env.TASKLY_PACKAGE_MANAGER = 'npm';
-      
+
       const config = { packageManager: 'yarn' as const };
       const cliOptions: CLIOptions = { commands: ['test'] };
-      
+
       const result = loader.mergeWithCLIOptions(config, cliOptions);
       expect(result.packageManager).toBe('yarn'); // Config wins over env
     });
 
     it('should use environment when config and CLI not set', () => {
       process.env.TASKLY_PACKAGE_MANAGER = 'npm';
-      
+
       const cliOptions: CLIOptions = { commands: ['test'] };
-      
+
       const result = loader.mergeWithCLIOptions(null, cliOptions);
       expect(result.packageManager).toBe('npm'); // Env is used
     });
@@ -398,29 +412,29 @@ export default {
         tasks: {
           dev: {
             command: 'npm run dev',
-            color: 'blue'
+            color: 'blue',
           },
           test: {
             command: 'npm run test',
             identifier: 'testing',
-            packageManager: 'yarn' as const
-          }
-        }
+            packageManager: 'yarn' as const,
+          },
+        },
       };
 
       const tasks = loader.convertConfigTasks(config);
-      
+
       expect(tasks).toEqual([
         {
           command: 'npm run dev',
           color: 'blue',
-          identifier: 'dev'
+          identifier: 'dev',
         },
         {
           command: 'npm run test',
           identifier: 'testing',
-          packageManager: 'yarn'
-        }
+          packageManager: 'yarn',
+        },
       ]);
     });
 
@@ -429,12 +443,12 @@ export default {
         tasks: {
           dev: { command: 'npm run dev' },
           test: { command: 'npm run test' },
-          build: { command: 'npm run build' }
-        }
+          build: { command: 'npm run build' },
+        },
       };
 
       const tasks = loader.convertConfigTasks(config, ['dev', 'build']);
-      
+
       expect(tasks).toHaveLength(2);
       expect(tasks.map(t => t.identifier)).toEqual(['dev', 'build']);
     });
@@ -453,8 +467,8 @@ export default {
         name: 'test-project',
         taskly: {
           packageManager: 'yarn',
-          killOthersOnFail: true
-        }
+          killOthersOnFail: true,
+        },
       };
 
       writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2));
@@ -462,7 +476,7 @@ export default {
       const result = loader.loadPackageJsonConfig(tempDir);
       expect(result).toEqual({
         packageManager: 'yarn',
-        killOthersOnFail: true
+        killOthersOnFail: true,
       });
     });
 
@@ -493,14 +507,14 @@ export default {
   describe('example config generation', () => {
     it('should generate example configurations', () => {
       const examples = loader.generateExampleConfigs();
-      
+
       expect(examples.json).toContain('packageManager');
       expect(examples.yaml).toContain('packageManager:');
       expect(examples.javascript).toContain('export default');
-      
+
       // Validate JSON is parseable
       expect(() => JSON.parse(examples.json)).not.toThrow();
-      
+
       // Validate YAML contains expected structure
       expect(examples.yaml).toContain('tasks:');
       expect(examples.yaml).toContain('dev:');

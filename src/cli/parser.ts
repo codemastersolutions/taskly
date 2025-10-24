@@ -3,7 +3,12 @@
  * Zero-dependency command-line argument parsing for Taskly
  */
 
-import { CLIOptions, PackageManager, TasklyError, ERROR_CODES } from '../types/index.js';
+import {
+  CLIOptions,
+  PackageManager,
+  TasklyError,
+  ERROR_CODES,
+} from '../types/index.js';
 
 export interface ParsedArgs {
   options: CLIOptions;
@@ -65,7 +70,11 @@ export class ArgumentParser {
   /**
    * Parse long options (--option)
    */
-  private parseLongOption(args: string[], index: number, options: CLIOptions): number {
+  private parseLongOption(
+    args: string[],
+    index: number,
+    options: CLIOptions
+  ): number {
     const arg = args[index];
     const [flag, value] = arg.split('=', 2);
 
@@ -79,18 +88,18 @@ export class ArgumentParser {
         return index + 1;
 
       case '--names':
-        return this.parseArrayOption(args, index, value, (val) => {
+        return this.parseArrayOption(args, index, value, val => {
           options.names = val.split(',').map(s => s.trim());
         });
 
       case '--colors':
-        return this.parseArrayOption(args, index, value, (val) => {
+        return this.parseArrayOption(args, index, value, val => {
           options.colors = val.split(',').map(s => s.trim());
         });
 
       case '--package-manager':
       case '--pm':
-        return this.parseStringOption(args, index, value, (val) => {
+        return this.parseStringOption(args, index, value, val => {
           this.validatePackageManager(val);
           options.packageManager = val as PackageManager;
         });
@@ -102,7 +111,7 @@ export class ArgumentParser {
 
       case '--max-concurrency':
       case '--concurrency':
-        return this.parseNumberOption(args, index, value, (val) => {
+        return this.parseNumberOption(args, index, value, val => {
           if (val <= 0) {
             throw new TasklyError(
               'Max concurrency must be greater than 0',
@@ -113,7 +122,7 @@ export class ArgumentParser {
         });
 
       case '--config':
-        return this.parseStringOption(args, index, value, (val) => {
+        return this.parseStringOption(args, index, value, val => {
           options.config = val;
         });
 
@@ -132,7 +141,11 @@ export class ArgumentParser {
   /**
    * Parse short options (-o)
    */
-  private parseShortOption(args: string[], index: number, options: CLIOptions): number {
+  private parseShortOption(
+    args: string[],
+    index: number,
+    options: CLIOptions
+  ): number {
     const arg = args[index];
     const flags = arg.slice(1); // Remove the '-'
 
@@ -164,7 +177,7 @@ export class ArgumentParser {
               ERROR_CODES.VALIDATION_ERROR
             );
           }
-          return this.parseStringOption(args, index, undefined, (val) => {
+          return this.parseStringOption(args, index, undefined, val => {
             options.names = val.split(',').map(s => s.trim());
           });
 
@@ -176,7 +189,7 @@ export class ArgumentParser {
               ERROR_CODES.VALIDATION_ERROR
             );
           }
-          return this.parseStringOption(args, index, undefined, (val) => {
+          return this.parseStringOption(args, index, undefined, val => {
             options.colors = val.split(',').map(s => s.trim());
           });
 
@@ -188,7 +201,7 @@ export class ArgumentParser {
               ERROR_CODES.VALIDATION_ERROR
             );
           }
-          return this.parseStringOption(args, index, undefined, (val) => {
+          return this.parseStringOption(args, index, undefined, val => {
             this.validatePackageManager(val);
             options.packageManager = val as PackageManager;
           });
@@ -201,7 +214,7 @@ export class ArgumentParser {
               ERROR_CODES.VALIDATION_ERROR
             );
           }
-          return this.parseNumberOption(args, index, undefined, (val) => {
+          return this.parseNumberOption(args, index, undefined, val => {
             if (val <= 0) {
               throw new TasklyError(
                 'Max concurrency must be greater than 0',
@@ -256,7 +269,7 @@ export class ArgumentParser {
     value: string | undefined,
     setter: (value: number) => void
   ): number {
-    return this.parseStringOption(args, index, value, (val) => {
+    return this.parseStringOption(args, index, value, val => {
       const num = parseInt(val, 10);
       if (isNaN(num)) {
         throw new TasklyError(
@@ -344,15 +357,17 @@ export class ArgumentParser {
    */
   getHelp(): string {
     const { usage, description, options, examples } = this.helpInfo;
-    
+
     let help = `${description}\n\n`;
     help += `Usage: ${usage}\n\n`;
     help += 'Options:\n';
 
     // Calculate max width for alignment
-    const maxWidth = Math.max(...options.map(opt => 
-      `${opt.flag}${opt.alias ? `, ${opt.alias}` : ''}`.length
-    ));
+    const maxWidth = Math.max(
+      ...options.map(
+        opt => `${opt.flag}${opt.alias ? `, ${opt.alias}` : ''}`.length
+      )
+    );
 
     for (const option of options) {
       const flags = `${option.flag}${option.alias ? `, ${option.alias}` : ''}`;
@@ -381,57 +396,57 @@ export class ArgumentParser {
           flag: '--help',
           alias: '-h',
           description: 'Show help information',
-          type: 'boolean'
+          type: 'boolean',
         },
         {
           flag: '--version',
           alias: '-v',
           description: 'Show version number',
-          type: 'boolean'
+          type: 'boolean',
         },
         {
           flag: '--names',
           alias: '-n',
           description: 'Comma-separated list of custom names for commands',
-          type: 'string'
+          type: 'string',
         },
         {
           flag: '--colors',
           alias: '-c',
           description: 'Comma-separated list of colors for command output',
-          type: 'string'
+          type: 'string',
         },
         {
           flag: '--package-manager',
           alias: '-p',
           description: 'Package manager to use (npm, yarn, pnpm, bun)',
           type: 'string',
-          default: 'auto-detect'
+          default: 'auto-detect',
         },
         {
           flag: '--kill-others-on-fail',
           alias: '-k',
           description: 'Kill all other tasks when one fails',
-          type: 'boolean'
+          type: 'boolean',
         },
         {
           flag: '--max-concurrency',
           alias: '-m',
           description: 'Maximum number of concurrent tasks',
           type: 'number',
-          default: 'unlimited'
+          default: 'unlimited',
         },
         {
           flag: '--config',
           description: 'Path to configuration file',
-          type: 'string'
+          type: 'string',
         },
         {
           flag: '--verbose',
           alias: '-V',
           description: 'Enable verbose output',
-          type: 'boolean'
-        }
+          type: 'boolean',
+        },
       ],
       examples: [
         'taskly "npm run dev" "npm run test:watch"',
@@ -439,8 +454,8 @@ export class ArgumentParser {
         'taskly --colors "blue,green" --kill-others-on-fail "npm start" "npm test"',
         'taskly --package-manager yarn "yarn dev" "yarn test"',
         'taskly --config taskly.config.json',
-        'taskly --max-concurrency 2 "npm run build" "npm run lint" "npm run test"'
-      ]
+        'taskly --max-concurrency 2 "npm run build" "npm run lint" "npm run test"',
+      ],
     };
   }
 }

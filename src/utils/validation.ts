@@ -3,27 +3,27 @@
  * Provides input validation, command sanitization, and parameter validation
  */
 
-import { 
-  TaskConfig, 
-  TasklyOptions, 
-  CLIOptions, 
-  PackageManager, 
-  Color, 
-  ValidationResult, 
-  TasklyError, 
-  ERROR_CODES 
+import {
+  TaskConfig,
+  TasklyOptions,
+  CLIOptions,
+  PackageManager,
+  Color,
+  ValidationResult,
+  TasklyError,
+  ERROR_CODES,
 } from '../types/index.js';
 
 // Security patterns for command validation
 const DANGEROUS_PATTERNS = [
-  /[;&|`$(){}[\]]/,  // Shell metacharacters
-  /\$\(/,            // Command substitution
-  /`[^`]*`/,         // Backtick command substitution
-  /\|\s*\w+/,        // Pipe to commands
-  />\s*\/dev/,       // Redirect to devices
-  /rm\s+-rf/i,       // Dangerous rm commands
-  /sudo\s+/i,        // Sudo commands
-  /chmod\s+/i,       // Permission changes
+  /[;&|`$(){}[\]]/, // Shell metacharacters
+  /\$\(/, // Command substitution
+  /`[^`]*`/, // Backtick command substitution
+  /\|\s*\w+/, // Pipe to commands
+  />\s*\/dev/, // Redirect to devices
+  /rm\s+-rf/i, // Dangerous rm commands
+  /sudo\s+/i, // Sudo commands
+  /chmod\s+/i, // Permission changes
 ];
 
 const ALLOWED_SHELL_CHARS = /^[a-zA-Z0-9\s\-_./:@=+,]*$/;
@@ -55,7 +55,9 @@ export function validateCommand(command: string): ValidationResult {
   // Security validation
   for (const pattern of DANGEROUS_PATTERNS) {
     if (pattern.test(trimmedCommand)) {
-      errors.push(`Command contains potentially dangerous pattern: ${pattern.source}`);
+      errors.push(
+        `Command contains potentially dangerous pattern: ${pattern.source}`
+      );
     }
   }
 
@@ -66,13 +68,15 @@ export function validateCommand(command: string): ValidationResult {
 
   // Check for common issues
   if (trimmedCommand.includes('&&') || trimmedCommand.includes('||')) {
-    warnings.push('Command contains shell operators - consider splitting into separate tasks');
+    warnings.push(
+      'Command contains shell operators - consider splitting into separate tasks'
+    );
   }
 
   return {
     valid: errors.length === 0,
     errors,
-    warnings
+    warnings,
   };
 }
 
@@ -116,13 +120,15 @@ export function validateIdentifier(identifier: string): ValidationResult {
 
   // Check for valid identifier characters
   if (!/^[a-zA-Z0-9\-_]+$/.test(trimmed)) {
-    errors.push('Identifier can only contain letters, numbers, hyphens, and underscores');
+    errors.push(
+      'Identifier can only contain letters, numbers, hyphens, and underscores'
+    );
   }
 
   return {
     valid: errors.length === 0,
     errors,
-    warnings
+    warnings,
   };
 }
 
@@ -145,13 +151,29 @@ export function validateColor(color: string): ValidationResult {
   }
 
   const validColors: Color[] = [
-    'red', 'green', 'yellow', 'blue', 'magenta', 'cyan',
-    'brightRed', 'brightGreen', 'brightYellow', 'brightBlue',
-    'brightMagenta', 'brightCyan', 'white', 'black', 'gray'
+    'red',
+    'green',
+    'yellow',
+    'blue',
+    'magenta',
+    'cyan',
+    'brightRed',
+    'brightGreen',
+    'brightYellow',
+    'brightBlue',
+    'brightMagenta',
+    'brightCyan',
+    'white',
+    'black',
+    'gray',
   ];
-  
+
   // Check if it's a predefined color (case-insensitive)
-  if (validColors.some(validColor => validColor.toLowerCase() === trimmed.toLowerCase())) {
+  if (
+    validColors.some(
+      validColor => validColor.toLowerCase() === trimmed.toLowerCase()
+    )
+  ) {
     return { valid: true, errors, warnings };
   }
 
@@ -165,7 +187,9 @@ export function validateColor(color: string): ValidationResult {
     return { valid: true, errors, warnings };
   }
 
-  errors.push(`Invalid color: ${color}. Use predefined colors, hex (#RRGGBB), or RGB format`);
+  errors.push(
+    `Invalid color: ${color}. Use predefined colors, hex (#RRGGBB), or RGB format`
+  );
   return { valid: false, errors, warnings };
 }
 
@@ -185,13 +209,15 @@ export function validatePackageManager(pm: string): ValidationResult {
   const trimmed = pm.trim().toLowerCase();
 
   if (!validPMs.includes(trimmed as PackageManager)) {
-    errors.push(`Invalid package manager: ${pm}. Valid options: ${validPMs.join(', ')}`);
+    errors.push(
+      `Invalid package manager: ${pm}. Valid options: ${validPMs.join(', ')}`
+    );
   }
 
   return {
     valid: errors.length === 0,
     errors,
-    warnings
+    warnings,
   };
 }
 
@@ -215,7 +241,9 @@ export function validateWorkingDirectory(cwd: string): ValidationResult {
 
   // Check for dangerous paths
   if (trimmed.includes('..')) {
-    warnings.push('Working directory contains ".." - ensure this is intentional');
+    warnings.push(
+      'Working directory contains ".." - ensure this is intentional'
+    );
   }
 
   // Check for absolute vs relative paths
@@ -226,7 +254,7 @@ export function validateWorkingDirectory(cwd: string): ValidationResult {
   return {
     valid: errors.length === 0,
     errors,
-    warnings
+    warnings,
   };
 }
 
@@ -278,14 +306,16 @@ export function validateTaskConfig(config: TaskConfig): ValidationResult {
   return {
     valid: errors.length === 0,
     errors,
-    warnings
+    warnings,
   };
 }
 
 /**
  * Validates TasklyOptions object
  */
-export function validateTasklyOptions(options: TasklyOptions): ValidationResult {
+export function validateTasklyOptions(
+  options: TasklyOptions
+): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -322,7 +352,10 @@ export function validateTasklyOptions(options: TasklyOptions): ValidationResult 
 
   // Validate optional maxConcurrency
   if (options.maxConcurrency !== undefined) {
-    if (typeof options.maxConcurrency !== 'number' || options.maxConcurrency < 1) {
+    if (
+      typeof options.maxConcurrency !== 'number' ||
+      options.maxConcurrency < 1
+    ) {
       errors.push('Max concurrency must be a positive number');
     } else if (options.maxConcurrency > 20) {
       warnings.push('High concurrency may impact system performance');
@@ -341,7 +374,7 @@ export function validateTasklyOptions(options: TasklyOptions): ValidationResult 
   return {
     valid: errors.length === 0,
     errors,
-    warnings
+    warnings,
   };
 }
 
@@ -421,7 +454,7 @@ export function validateCLIOptions(options: CLIOptions): ValidationResult {
   return {
     valid: errors.length === 0,
     errors,
-    warnings
+    warnings,
   };
 }
 
@@ -429,14 +462,14 @@ export function validateCLIOptions(options: CLIOptions): ValidationResult {
  * Creates a validation error with proper context
  */
 export function createValidationError(
-  message: string, 
-  field?: string, 
+  message: string,
+  field?: string,
   _value?: unknown
 ): TasklyError {
-  const fullMessage = field 
-    ? `Validation error for ${field}: ${message}` 
+  const fullMessage = field
+    ? `Validation error for ${field}: ${message}`
     : `Validation error: ${message}`;
-  
+
   return new TasklyError(fullMessage, ERROR_CODES.VALIDATION_ERROR);
 }
 
@@ -449,13 +482,13 @@ export function validateOrThrow<T>(
   context?: string
 ): T {
   const result = validator(value);
-  
+
   if (!result.valid) {
-    const message = context 
+    const message = context
       ? `${context}: ${result.errors.join(', ')}`
       : result.errors.join(', ');
     throw createValidationError(message);
   }
-  
+
   return value;
 }

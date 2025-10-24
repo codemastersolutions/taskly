@@ -18,7 +18,7 @@ const ANSI_COLORS: Record<Color, string> = {
   brightYellow: '\x1b[93m',
   brightBlue: '\x1b[94m',
   brightMagenta: '\x1b[95m',
-  brightCyan: '\x1b[96m'
+  brightCyan: '\x1b[96m',
 };
 
 /**
@@ -30,9 +30,18 @@ const ANSI_RESET = '\x1b[0m';
  * Default color cycle for automatic assignment
  */
 const DEFAULT_COLORS: Color[] = [
-  'red', 'green', 'yellow', 'blue', 'magenta', 'cyan',
-  'brightRed', 'brightGreen', 'brightYellow', 'brightBlue',
-  'brightMagenta', 'brightCyan'
+  'red',
+  'green',
+  'yellow',
+  'blue',
+  'magenta',
+  'cyan',
+  'brightRed',
+  'brightGreen',
+  'brightYellow',
+  'brightBlue',
+  'brightMagenta',
+  'brightCyan',
 ];
 
 /**
@@ -44,15 +53,18 @@ export class ColorManager {
   private availableColors: Color[];
 
   constructor(customColors?: (Color | string)[]) {
-    this.availableColors = customColors?.filter(color => 
-      typeof color === 'string' && color in ANSI_COLORS
-    ) as Color[] || [...DEFAULT_COLORS];
+    this.availableColors = (customColors?.filter(
+      color => typeof color === 'string' && color in ANSI_COLORS
+    ) as Color[]) || [...DEFAULT_COLORS];
   }
 
   /**
    * Assigns a color to a task identifier
    */
-  assignColor(identifier: string, customColor?: Color | string): ColorAssignment {
+  assignColor(
+    identifier: string,
+    customColor?: Color | string
+  ): ColorAssignment {
     // Check if already assigned
     const existing = this.assignments.get(identifier);
     if (existing) {
@@ -68,7 +80,8 @@ export class ColorManager {
       ansiCode = this.getAnsiCode(customColor);
     } else {
       // Auto-assign from available colors
-      color = this.availableColors[this.colorIndex % this.availableColors.length];
+      color =
+        this.availableColors[this.colorIndex % this.availableColors.length];
       ansiCode = ANSI_COLORS[color as Color];
       this.colorIndex++;
     }
@@ -76,7 +89,7 @@ export class ColorManager {
     const assignment: ColorAssignment = {
       identifier,
       color,
-      ansiCode
+      ansiCode,
     };
 
     this.assignments.set(identifier, assignment);
@@ -105,7 +118,11 @@ export class ColorManager {
   /**
    * Formats a complete output line with color and prefix
    */
-  formatOutputLine(identifier: string, content: string, prefix?: string): string {
+  formatOutputLine(
+    identifier: string,
+    content: string,
+    prefix?: string
+  ): string {
     const assignment = this.assignments.get(identifier);
     if (!assignment) {
       return content;
@@ -113,7 +130,7 @@ export class ColorManager {
 
     const displayPrefix = prefix || identifier;
     const coloredPrefix = `${assignment.ansiCode}[${displayPrefix}]${ANSI_RESET}`;
-    
+
     return `${coloredPrefix} ${content}`;
   }
 
@@ -127,7 +144,11 @@ export class ColorManager {
     }
 
     // Handle hex colors (#RRGGBB)
-    if (typeof color === 'string' && color.startsWith('#') && color.length === 7) {
+    if (
+      typeof color === 'string' &&
+      color.startsWith('#') &&
+      color.length === 7
+    ) {
       const hex = color.slice(1);
       const r = parseInt(hex.slice(0, 2), 16);
       const g = parseInt(hex.slice(2, 4), 16);
@@ -136,8 +157,15 @@ export class ColorManager {
     }
 
     // Handle rgb colors (rgb(r,g,b))
-    if (typeof color === 'string' && color.startsWith('rgb(') && color.endsWith(')')) {
-      const values = color.slice(4, -1).split(',').map(v => parseInt(v.trim()));
+    if (
+      typeof color === 'string' &&
+      color.startsWith('rgb(') &&
+      color.endsWith(')')
+    ) {
+      const values = color
+        .slice(4, -1)
+        .split(',')
+        .map(v => parseInt(v.trim()));
       if (values.length === 3 && values.every(v => v >= 0 && v <= 255)) {
         return `\x1b[38;2;${values[0]};${values[1]};${values[2]}m`;
       }
@@ -167,14 +195,16 @@ export class ColorManager {
    */
   assignCustomColor(identifier: string, color: string): ColorAssignment {
     if (!ColorManager.isValidColor(color)) {
-      throw new Error(`Invalid color format: ${color}. Use predefined color names, hex (#RRGGBB), or rgb(r,g,b) format.`);
+      throw new Error(
+        `Invalid color format: ${color}. Use predefined color names, hex (#RRGGBB), or rgb(r,g,b) format.`
+      );
     }
 
     const ansiCode = this.getAnsiCode(color);
     const assignment: ColorAssignment = {
       identifier,
       color,
-      ansiCode
+      ansiCode,
     };
 
     this.assignments.set(identifier, assignment);
@@ -220,8 +250,13 @@ export class ColorManager {
     if (!color.startsWith('rgb(') || !color.endsWith(')')) {
       return false;
     }
-    const values = color.slice(4, -1).split(',').map(v => parseInt(v.trim()));
-    return values.length === 3 && values.every(v => !isNaN(v) && v >= 0 && v <= 255);
+    const values = color
+      .slice(4, -1)
+      .split(',')
+      .map(v => parseInt(v.trim()));
+    return (
+      values.length === 3 && values.every(v => !isNaN(v) && v >= 0 && v <= 255)
+    );
   }
 
   /**
@@ -231,7 +266,10 @@ export class ColorManager {
     if (!ColorManager.isValidRgbColor(color)) {
       return null;
     }
-    const values = color.slice(4, -1).split(',').map(v => parseInt(v.trim()));
+    const values = color
+      .slice(4, -1)
+      .split(',')
+      .map(v => parseInt(v.trim()));
     return [values[0], values[1], values[2]];
   }
 

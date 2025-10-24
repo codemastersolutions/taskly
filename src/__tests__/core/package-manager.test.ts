@@ -29,7 +29,7 @@ describe('PackageManagerDetector', () => {
       expect(result).toBe(true);
       expect(mockExecSync).toHaveBeenCalledWith('npm --version', {
         stdio: 'ignore',
-        timeout: 5000
+        timeout: 5000,
       });
     });
 
@@ -68,8 +68,8 @@ describe('PackageManagerDetector', () => {
           throw new Error('yarn not found');
         })
         .mockReturnValue('1.0.0');
-      
-      mockExistsSync.mockImplementation((path) => {
+
+      mockExistsSync.mockImplementation(path => {
         return path.toString().endsWith('yarn.lock');
       });
 
@@ -84,7 +84,7 @@ describe('PackageManagerDetector', () => {
           throw new Error('yarn not found');
         })
         .mockReturnValue('1.0.0');
-      
+
       mockExistsSync.mockReturnValue(false);
 
       const result = PackageManagerDetector.detect('/test/dir', 'yarn');
@@ -98,15 +98,19 @@ describe('PackageManagerDetector', () => {
       });
       mockExistsSync.mockReturnValue(false);
 
-      expect(() => PackageManagerDetector.detect('/test/dir')).toThrow(TasklyError);
-      expect(() => PackageManagerDetector.detect('/test/dir')).toThrow('No package manager found');
+      expect(() => PackageManagerDetector.detect('/test/dir')).toThrow(
+        TasklyError
+      );
+      expect(() => PackageManagerDetector.detect('/test/dir')).toThrow(
+        'No package manager found'
+      );
     });
   });
 
   describe('lock file detection', () => {
     it('should detect npm from package-lock.json', () => {
       mockExecSync.mockReturnValue('1.0.0');
-      mockExistsSync.mockImplementation((path) => {
+      mockExistsSync.mockImplementation(path => {
         return path.toString().endsWith('package-lock.json');
       });
 
@@ -117,7 +121,7 @@ describe('PackageManagerDetector', () => {
 
     it('should detect yarn from yarn.lock', () => {
       mockExecSync.mockReturnValue('1.0.0');
-      mockExistsSync.mockImplementation((path) => {
+      mockExistsSync.mockImplementation(path => {
         return path.toString().endsWith('yarn.lock');
       });
 
@@ -128,7 +132,7 @@ describe('PackageManagerDetector', () => {
 
     it('should detect pnpm from pnpm-lock.yaml', () => {
       mockExecSync.mockReturnValue('1.0.0');
-      mockExistsSync.mockImplementation((path) => {
+      mockExistsSync.mockImplementation(path => {
         return path.toString().endsWith('pnpm-lock.yaml');
       });
 
@@ -139,7 +143,7 @@ describe('PackageManagerDetector', () => {
 
     it('should detect bun from bun.lockb', () => {
       mockExecSync.mockReturnValue('1.0.0');
-      mockExistsSync.mockImplementation((path) => {
+      mockExistsSync.mockImplementation(path => {
         return path.toString().endsWith('bun.lockb');
       });
 
@@ -150,9 +154,11 @@ describe('PackageManagerDetector', () => {
 
     it('should prioritize first found lock file when multiple exist', () => {
       mockExecSync.mockReturnValue('1.0.0');
-      mockExistsSync.mockImplementation((path) => {
+      mockExistsSync.mockImplementation(path => {
         const pathStr = path.toString();
-        return pathStr.endsWith('package-lock.json') || pathStr.endsWith('yarn.lock');
+        return (
+          pathStr.endsWith('package-lock.json') || pathStr.endsWith('yarn.lock')
+        );
       });
 
       const result = PackageManagerDetector.detect('/test/dir');
@@ -174,8 +180,10 @@ describe('PackageManagerDetector', () => {
         throw new Error('Command not found');
       });
 
-      expect(() => PackageManagerDetector.validate('yarn')).toThrow(TasklyError);
-      
+      expect(() => PackageManagerDetector.validate('yarn')).toThrow(
+        TasklyError
+      );
+
       try {
         PackageManagerDetector.validate('yarn');
       } catch (error) {
@@ -188,19 +196,25 @@ describe('PackageManagerDetector', () => {
       mockExistsSync.mockReturnValue(true);
       mockExecSync.mockReturnValue('1.0.0');
 
-      expect(() => PackageManagerDetector.validate('npm', '/custom/npm')).not.toThrow();
+      expect(() =>
+        PackageManagerDetector.validate('npm', '/custom/npm')
+      ).not.toThrow();
       expect(mockExistsSync).toHaveBeenCalledWith('/custom/npm');
       expect(mockExecSync).toHaveBeenCalledWith('"/custom/npm" --version', {
         stdio: 'ignore',
-        timeout: 5000
+        timeout: 5000,
       });
     });
 
     it('should throw error for non-existent custom path', () => {
       mockExistsSync.mockReturnValue(false);
 
-      expect(() => PackageManagerDetector.validate('npm', '/nonexistent/npm')).toThrow(TasklyError);
-      expect(() => PackageManagerDetector.validate('npm', '/nonexistent/npm')).toThrow('Custom package manager path not found');
+      expect(() =>
+        PackageManagerDetector.validate('npm', '/nonexistent/npm')
+      ).toThrow(TasklyError);
+      expect(() =>
+        PackageManagerDetector.validate('npm', '/nonexistent/npm')
+      ).toThrow('Custom package manager path not found');
     });
 
     it('should throw error for non-executable custom path', () => {
@@ -209,8 +223,12 @@ describe('PackageManagerDetector', () => {
         throw new Error('Permission denied');
       });
 
-      expect(() => PackageManagerDetector.validate('npm', '/invalid/npm')).toThrow(TasklyError);
-      expect(() => PackageManagerDetector.validate('npm', '/invalid/npm')).toThrow('not executable or invalid');
+      expect(() =>
+        PackageManagerDetector.validate('npm', '/invalid/npm')
+      ).toThrow(TasklyError);
+      expect(() =>
+        PackageManagerDetector.validate('npm', '/invalid/npm')
+      ).toThrow('not executable or invalid');
     });
   });
 
@@ -236,7 +254,7 @@ describe('PackageManagerDetector', () => {
     });
 
     it('should return only available package managers', () => {
-      mockExecSync.mockImplementation((command) => {
+      mockExecSync.mockImplementation(command => {
         const cmd = command.toString();
         if (cmd === 'npm --version' || cmd === 'yarn --version') {
           return '1.0.0';
@@ -268,7 +286,7 @@ describe('PackageManagerDetector', () => {
 
       expect(result).toEqual({
         name: 'npm',
-        version: '1.2.3'
+        version: '1.2.3',
       });
     });
 
@@ -286,30 +304,44 @@ describe('PackageManagerDetector', () => {
   describe('validateForExecution', () => {
     it('should return valid result with warnings for mismatched lock file', () => {
       mockExecSync.mockReturnValue('1.0.0');
-      mockExistsSync.mockImplementation((path) => {
+      mockExistsSync.mockImplementation(path => {
         const pathStr = path.toString();
-        return pathStr.includes('package.json') || pathStr.includes('yarn.lock');
+        return (
+          pathStr.includes('package.json') || pathStr.includes('yarn.lock')
+        );
       });
 
-      const result = PackageManagerDetector.validateForExecution('npm', '/test/dir');
+      const result = PackageManagerDetector.validateForExecution(
+        'npm',
+        '/test/dir'
+      );
 
       expect(result.valid).toBe(true);
       expect(result.pm).toBe('npm');
       expect(result.command).toBe('npm');
       expect(result.warnings.length).toBeGreaterThan(0);
-      expect(result.warnings.some(w => w.includes('Lock file suggests yarn but using npm'))).toBe(true);
+      expect(
+        result.warnings.some(w =>
+          w.includes('Lock file suggests yarn but using npm')
+        )
+      ).toBe(true);
     });
 
     it('should warn when no package.json found', () => {
       mockExecSync.mockReturnValue('1.0.0');
-      mockExistsSync.mockImplementation((path) => {
+      mockExistsSync.mockImplementation(path => {
         return !path.toString().includes('package.json');
       });
 
-      const result = PackageManagerDetector.validateForExecution('npm', '/test/dir');
+      const result = PackageManagerDetector.validateForExecution(
+        'npm',
+        '/test/dir'
+      );
 
       expect(result.warnings.length).toBeGreaterThan(0);
-      expect(result.warnings.some(w => w.includes('No package.json found'))).toBe(true);
+      expect(
+        result.warnings.some(w => w.includes('No package.json found'))
+      ).toBe(true);
     });
   });
 
@@ -322,7 +354,7 @@ describe('PackageManagerDetector', () => {
       expect(result).toEqual({
         pm: 'yarn',
         command: 'yarn',
-        source: 'preferred'
+        source: 'preferred',
       });
     });
 
@@ -332,8 +364,8 @@ describe('PackageManagerDetector', () => {
           throw new Error('yarn not found');
         })
         .mockReturnValue('1.0.0');
-      
-      mockExistsSync.mockImplementation((path) => {
+
+      mockExistsSync.mockImplementation(path => {
         return path.toString().endsWith('pnpm-lock.yaml');
       });
 
@@ -342,7 +374,7 @@ describe('PackageManagerDetector', () => {
       expect(result).toEqual({
         pm: 'pnpm',
         command: 'pnpm',
-        source: 'lockfile'
+        source: 'lockfile',
       });
     });
 
@@ -352,7 +384,7 @@ describe('PackageManagerDetector', () => {
           throw new Error('yarn not found');
         })
         .mockReturnValue('1.0.0');
-      
+
       mockExistsSync.mockReturnValue(false);
 
       const result = PackageManagerDetector.resolve('yarn', '/test/dir');
@@ -360,7 +392,7 @@ describe('PackageManagerDetector', () => {
       expect(result).toEqual({
         pm: 'npm',
         command: 'npm',
-        source: 'fallback'
+        source: 'fallback',
       });
     });
 
@@ -368,12 +400,16 @@ describe('PackageManagerDetector', () => {
       mockExistsSync.mockReturnValue(true);
       mockExecSync.mockReturnValue('1.0.0');
 
-      const result = PackageManagerDetector.resolve('npm', '/test/dir', '/custom/npm');
+      const result = PackageManagerDetector.resolve(
+        'npm',
+        '/test/dir',
+        '/custom/npm'
+      );
 
       expect(result).toEqual({
         pm: 'npm',
         command: '/custom/npm',
-        source: 'preferred'
+        source: 'preferred',
       });
     });
   });

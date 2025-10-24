@@ -36,12 +36,17 @@ function runInParallel(commands) {
     process.exit(0);
   });
 
-  return Promise.all(processes.map(proc => new Promise((resolve, reject) => {
-    proc.on('close', code => {
-      if (code === 0) resolve();
-      else reject(new Error(`Process exited with code ${code}`));
-    });
-  })));
+  return Promise.all(
+    processes.map(
+      proc =>
+        new Promise((resolve, reject) => {
+          proc.on('close', code => {
+            if (code === 0) resolve();
+            else reject(new Error(`Process exited with code ${code}`));
+          });
+        })
+    )
+  );
 }
 
 async function main() {
@@ -88,7 +93,7 @@ Commands:
   }
 }
 
-main().catch((error) => {
+main().catch(error => {
   console.error('[DEV ERROR]', error);
   process.exit(1);
 });

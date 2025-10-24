@@ -11,14 +11,14 @@ export class PackageManagerDetector {
     'package-lock.json': 'npm',
     'yarn.lock': 'yarn',
     'pnpm-lock.yaml': 'pnpm',
-    'bun.lockb': 'bun'
+    'bun.lockb': 'bun',
   };
 
   private static readonly PM_COMMANDS: Record<PackageManager, string[]> = {
     npm: ['npm', '--version'],
     yarn: ['yarn', '--version'],
     pnpm: ['pnpm', '--version'],
-    bun: ['bun', '--version']
+    bun: ['bun', '--version'],
   };
 
   /**
@@ -27,7 +27,10 @@ export class PackageManagerDetector {
    * @param preferredPM Preferred package manager to use if available
    * @returns Detected package manager
    */
-  public static detect(cwd: string = process.cwd(), preferredPM?: PackageManager): PackageManager {
+  public static detect(
+    cwd: string = process.cwd(),
+    preferredPM?: PackageManager
+  ): PackageManager {
     // If a preferred PM is specified and available, use it
     if (preferredPM && this.isAvailable(preferredPM)) {
       return preferredPM;
@@ -58,9 +61,9 @@ export class PackageManagerDetector {
   public static isAvailable(pm: PackageManager): boolean {
     try {
       const [command, ...args] = this.PM_COMMANDS[pm];
-      execSync(`${command} ${args.join(' ')}`, { 
+      execSync(`${command} ${args.join(' ')}`, {
         stdio: 'ignore',
-        timeout: 5000 // 5 second timeout
+        timeout: 5000, // 5 second timeout
       });
       return true;
     } catch {
@@ -83,11 +86,11 @@ export class PackageManagerDetector {
           ERROR_CODES.PM_NOT_FOUND
         );
       }
-      
+
       try {
-        execSync(`"${customPath}" --version`, { 
+        execSync(`"${customPath}" --version`, {
           stdio: 'ignore',
-          timeout: 5000
+          timeout: 5000,
         });
       } catch (error) {
         throw new TasklyError(
@@ -142,13 +145,13 @@ export class PackageManagerDetector {
    */
   public static getAvailablePackageManagers(): PackageManager[] {
     const available: PackageManager[] = [];
-    
+
     for (const pm of ['npm', 'yarn', 'pnpm', 'bun'] as PackageManager[]) {
       if (this.isAvailable(pm)) {
         available.push(pm);
       }
     }
-    
+
     return available;
   }
 
@@ -157,17 +160,19 @@ export class PackageManagerDetector {
    * @param pm Package manager to get info for
    * @returns Package manager info or null if not available
    */
-  public static getPackageManagerInfo(pm: PackageManager): { name: PackageManager; version: string } | null {
+  public static getPackageManagerInfo(
+    pm: PackageManager
+  ): { name: PackageManager; version: string } | null {
     try {
       const [command, ...args] = this.PM_COMMANDS[pm];
-      const version = execSync(`${command} ${args.join(' ')}`, { 
+      const version = execSync(`${command} ${args.join(' ')}`, {
         encoding: 'utf8',
-        timeout: 5000
+        timeout: 5000,
       }).trim();
-      
+
       return {
         name: pm,
-        version
+        version,
       };
     } catch {
       return null;
@@ -182,22 +187,29 @@ export class PackageManagerDetector {
    * @returns Validation result with detailed information
    */
   public static validateForExecution(
-    pm: PackageManager, 
-    cwd: string = process.cwd(), 
+    pm: PackageManager,
+    cwd: string = process.cwd(),
     customPath?: string
-  ): { valid: boolean; pm: PackageManager; command: string; warnings: string[] } {
+  ): {
+    valid: boolean;
+    pm: PackageManager;
+    command: string;
+    warnings: string[];
+  } {
     const warnings: string[] = [];
-    
+
     try {
       // First validate the package manager is available
       this.validate(pm, customPath);
-      
+
       // Check if the working directory has a package.json
       const packageJsonPath = join(cwd, 'package.json');
       if (!existsSync(packageJsonPath)) {
-        warnings.push(`No package.json found in ${cwd}. Some package manager commands may fail.`);
+        warnings.push(
+          `No package.json found in ${cwd}. Some package manager commands may fail.`
+        );
       }
-      
+
       // Check if lock file matches the package manager
       const detectedPM = this.detectFromLockFiles(cwd);
       if (detectedPM && detectedPM !== pm) {
@@ -205,21 +217,21 @@ export class PackageManagerDetector {
           `Lock file suggests ${detectedPM} but using ${pm}. This may cause dependency conflicts.`
         );
       }
-      
+
       // Get the final command to use
       const command = this.getCommand(pm, customPath);
-      
+
       return {
         valid: true,
         pm,
         command,
-        warnings
+        warnings,
       };
     } catch (error) {
       if (error instanceof TasklyError) {
         throw error;
       }
-      
+
       throw new TasklyError(
         `Package manager validation failed: ${error instanceof Error ? error.message : String(error)}`,
         ERROR_CODES.PM_NOT_FOUND,
@@ -239,13 +251,13 @@ export class PackageManagerDetector {
       if (!existsSync(customPath)) {
         return false;
       }
-      
+
       // Try to execute --version to verify it's a valid package manager
-      execSync(`"${customPath}" --version`, { 
+      execSync(`"${customPath}" --version`, {
         stdio: 'ignore',
-        timeout: 5000
+        timeout: 5000,
       });
-      
+
       return true;
     } catch {
       return false;
@@ -263,7 +275,11 @@ export class PackageManagerDetector {
     preferredPM?: PackageManager,
     cwd: string = process.cwd(),
     customPath?: string
-  ): { pm: PackageManager; command: string; source: 'preferred' | 'lockfile' | 'fallback' } {
+  ): {
+    pm: PackageManager;
+    command: string;
+    source: 'preferred' | 'lockfile' | 'fallback';
+  } {
     // If custom path is provided, validate it first
     if (customPath) {
       if (!this.isValidCustomPath(customPath)) {
@@ -272,47 +288,47 @@ export class PackageManagerDetector {
           ERROR_CODES.PM_NOT_FOUND
         );
       }
-      
+
       // Try to determine which PM the custom path represents
       // This is a best-effort attempt based on the path
       const pmFromPath = this.detectPMFromPath(customPath);
       const finalPM = preferredPM || pmFromPath || 'npm';
-      
+
       return {
         pm: finalPM,
         command: customPath,
-        source: 'preferred'
+        source: 'preferred',
       };
     }
-    
+
     // Try preferred PM first
     if (preferredPM && this.isAvailable(preferredPM)) {
       return {
         pm: preferredPM,
         command: preferredPM,
-        source: 'preferred'
+        source: 'preferred',
       };
     }
-    
+
     // Try to detect from lock files
     const detectedPM = this.detectFromLockFiles(cwd);
     if (detectedPM && this.isAvailable(detectedPM)) {
       return {
         pm: detectedPM,
         command: detectedPM,
-        source: 'lockfile'
+        source: 'lockfile',
       };
     }
-    
+
     // Fallback to npm
     if (this.isAvailable('npm')) {
       return {
         pm: 'npm',
         command: 'npm',
-        source: 'fallback'
+        source: 'fallback',
       };
     }
-    
+
     throw new TasklyError(
       'No package manager available. Please install npm, yarn, pnpm, or bun.',
       ERROR_CODES.PM_NOT_FOUND
@@ -326,12 +342,12 @@ export class PackageManagerDetector {
    */
   private static detectPMFromPath(customPath: string): PackageManager | null {
     const lowerPath = customPath.toLowerCase();
-    
+
     if (lowerPath.includes('npm')) return 'npm';
     if (lowerPath.includes('yarn')) return 'yarn';
     if (lowerPath.includes('pnpm')) return 'pnpm';
     if (lowerPath.includes('bun')) return 'bun';
-    
+
     return null;
   }
 }

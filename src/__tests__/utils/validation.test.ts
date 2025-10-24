@@ -10,9 +10,14 @@ import {
   validateTasklyOptions,
   validateCLIOptions,
   createValidationError,
-  validateOrThrow
+  validateOrThrow,
 } from '../../utils/validation.js';
-import { TaskConfig, TasklyOptions, CLIOptions, ERROR_CODES } from '../../types/index.js';
+import {
+  TaskConfig,
+  TasklyOptions,
+  CLIOptions,
+  ERROR_CODES,
+} from '../../types/index.js';
 
 describe('Validation Utils', () => {
   describe('validateCommand', () => {
@@ -25,7 +30,9 @@ describe('Validation Utils', () => {
     it('should reject empty commands', () => {
       const result = validateCommand('');
       expect(result.valid).toBe(false);
-      expect(result.errors).toContain('Command cannot be empty or whitespace only');
+      expect(result.errors).toContain(
+        'Command cannot be empty or whitespace only'
+      );
     });
 
     it('should reject non-string commands', () => {
@@ -38,7 +45,9 @@ describe('Validation Utils', () => {
       const longCommand = 'a'.repeat(1001);
       const result = validateCommand(longCommand);
       expect(result.valid).toBe(false);
-      expect(result.errors).toContain('Command is too long (maximum 1000 characters)');
+      expect(result.errors).toContain(
+        'Command is too long (maximum 1000 characters)'
+      );
     });
 
     it('should detect dangerous patterns', () => {
@@ -49,7 +58,7 @@ describe('Validation Utils', () => {
         'command && rm file',
         'command | rm',
         'command `rm file`',
-        'command $(rm file)'
+        'command $(rm file)',
       ];
 
       dangerousCommands.forEach(cmd => {
@@ -61,7 +70,9 @@ describe('Validation Utils', () => {
 
     it('should warn about shell operators', () => {
       const result = validateCommand('npm run build && npm run test');
-      expect(result.warnings).toContain('Command contains shell operators - consider splitting into separate tasks');
+      expect(result.warnings).toContain(
+        'Command contains shell operators - consider splitting into separate tasks'
+      );
     });
   });
 
@@ -109,7 +120,9 @@ describe('Validation Utils', () => {
       const longId = 'a'.repeat(51);
       const result = validateIdentifier(longId);
       expect(result.valid).toBe(false);
-      expect(result.errors).toContain('Identifier is too long (maximum 50 characters)');
+      expect(result.errors).toContain(
+        'Identifier is too long (maximum 50 characters)'
+      );
     });
   });
 
@@ -176,12 +189,16 @@ describe('Validation Utils', () => {
 
     it('should warn about parent directory references', () => {
       const result = validateWorkingDirectory('../parent');
-      expect(result.warnings).toContain('Working directory contains ".." - ensure this is intentional');
+      expect(result.warnings).toContain(
+        'Working directory contains ".." - ensure this is intentional'
+      );
     });
 
     it('should warn about absolute paths', () => {
       const result = validateWorkingDirectory('/absolute/path');
-      expect(result.warnings).toContain('Using absolute path for working directory');
+      expect(result.warnings).toContain(
+        'Using absolute path for working directory'
+      );
     });
   });
 
@@ -192,7 +209,7 @@ describe('Validation Utils', () => {
         identifier: 'dev',
         color: 'blue',
         packageManager: 'npm',
-        cwd: './src'
+        cwd: './src',
       };
       const result = validateTaskConfig(config);
       expect(result.valid).toBe(true);
@@ -203,7 +220,7 @@ describe('Validation Utils', () => {
         command: '',
         identifier: 'invalid identifier!',
         color: 'invalid-color',
-        packageManager: 'invalid-pm'
+        packageManager: 'invalid-pm',
       } as TaskConfig;
       const result = validateTaskConfig(config);
       expect(result.valid).toBe(false);
@@ -214,12 +231,9 @@ describe('Validation Utils', () => {
   describe('validateTasklyOptions', () => {
     it('should validate valid options', () => {
       const options: TasklyOptions = {
-        tasks: [
-          { command: 'npm run dev' },
-          { command: 'npm run test' }
-        ],
+        tasks: [{ command: 'npm run dev' }, { command: 'npm run test' }],
         killOthersOnFail: true,
-        maxConcurrency: 4
+        maxConcurrency: 4,
       };
       const result = validateTasklyOptions(options);
       expect(result.valid).toBe(true);
@@ -227,7 +241,7 @@ describe('Validation Utils', () => {
 
     it('should reject empty tasks array', () => {
       const options: TasklyOptions = {
-        tasks: []
+        tasks: [],
       };
       const result = validateTasklyOptions(options);
       expect(result.valid).toBe(false);
@@ -237,10 +251,12 @@ describe('Validation Utils', () => {
     it('should warn about high concurrency', () => {
       const options: TasklyOptions = {
         tasks: [{ command: 'npm run dev' }],
-        maxConcurrency: 25
+        maxConcurrency: 25,
       };
       const result = validateTasklyOptions(options);
-      expect(result.warnings).toContain('High concurrency may impact system performance');
+      expect(result.warnings).toContain(
+        'High concurrency may impact system performance'
+      );
     });
   });
 
@@ -250,7 +266,7 @@ describe('Validation Utils', () => {
         commands: ['npm run dev', 'npm run test'],
         names: ['dev', 'test'],
         colors: ['blue', 'green'],
-        packageManager: 'npm'
+        packageManager: 'npm',
       };
       const result = validateCLIOptions(options);
       expect(result.valid).toBe(true);
@@ -259,17 +275,23 @@ describe('Validation Utils', () => {
     it('should reject mismatched array lengths', () => {
       const options: CLIOptions = {
         commands: ['npm run dev', 'npm run test'],
-        names: ['dev'] // Length mismatch
+        names: ['dev'], // Length mismatch
       };
       const result = validateCLIOptions(options);
       expect(result.valid).toBe(false);
-      expect(result.errors).toContain('Names array length must match commands array length');
+      expect(result.errors).toContain(
+        'Names array length must match commands array length'
+      );
     });
   });
 
   describe('createValidationError', () => {
     it('should create validation error with proper format', () => {
-      const error = createValidationError('Test error', 'testField', 'testValue');
+      const error = createValidationError(
+        'Test error',
+        'testField',
+        'testValue'
+      );
       expect(error.message).toBe('Validation error for testField: Test error');
       expect(error.code).toBe(ERROR_CODES.VALIDATION_ERROR);
     });

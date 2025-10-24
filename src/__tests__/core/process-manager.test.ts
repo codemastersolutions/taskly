@@ -6,22 +6,22 @@ vi.mock('child_process', () => {
   const createMockChildProcess = () => {
     const stdout = new EventEmitter();
     const stderr = new EventEmitter();
-    
+
     // Add stream methods
     stdout.setEncoding = vi.fn();
     stderr.setEncoding = vi.fn();
-    
+
     return {
       stdout,
       stderr,
       on: vi.fn(),
       kill: vi.fn(),
-      pid: 12345
+      pid: 12345,
     };
   };
 
   return {
-    spawn: vi.fn(() => createMockChildProcess())
+    spawn: vi.fn(() => createMockChildProcess()),
   };
 });
 
@@ -53,7 +53,7 @@ describe('ProcessManager', () => {
     it('should spawn a process successfully', async () => {
       const task: TaskConfig = {
         command: 'echo "hello world"',
-        identifier: 'test-task'
+        identifier: 'test-task',
       };
 
       const processInfo = await processManager.spawn(task);
@@ -63,7 +63,7 @@ describe('ProcessManager', () => {
         command: 'echo "hello world"',
         startTime: expect.any(Number),
         status: 'running',
-        pid: 12345
+        pid: 12345,
       });
 
       expect(mockSpawn).toHaveBeenCalledWith(
@@ -73,14 +73,14 @@ describe('ProcessManager', () => {
           cwd: expect.any(String),
           stdio: ['ignore', 'pipe', 'pipe'],
           shell: true,
-          env: expect.any(Object)
+          env: expect.any(Object),
         })
       );
     });
 
     it('should generate identifier if not provided', async () => {
       const task: TaskConfig = {
-        command: 'npm test'
+        command: 'npm test',
       };
 
       const processInfo = await processManager.spawn(task);
@@ -91,24 +91,28 @@ describe('ProcessManager', () => {
     it('should validate dangerous commands', async () => {
       const dangerousTask: TaskConfig = {
         command: 'rm -rf /',
-        identifier: 'dangerous'
+        identifier: 'dangerous',
       };
 
-      await expect(processManager.spawn(dangerousTask)).rejects.toThrow(TasklyError);
-      await expect(processManager.spawn(dangerousTask)).rejects.toThrow('potentially dangerous pattern');
+      await expect(processManager.spawn(dangerousTask)).rejects.toThrow(
+        TasklyError
+      );
+      await expect(processManager.spawn(dangerousTask)).rejects.toThrow(
+        'potentially dangerous pattern'
+      );
     });
 
     it('should apply process options', async () => {
       const task: TaskConfig = {
         command: 'echo test',
-        identifier: 'test'
+        identifier: 'test',
       };
 
       const options: ProcessOptions = {
         timeout: 5000,
         maxMemory: 256,
         cwd: '/custom/path',
-        env: { CUSTOM_VAR: 'value' }
+        env: { CUSTOM_VAR: 'value' },
       };
 
       await processManager.spawn(task, options);
@@ -119,8 +123,8 @@ describe('ProcessManager', () => {
         expect.objectContaining({
           cwd: '/custom/path',
           env: expect.objectContaining({
-            CUSTOM_VAR: 'value'
-          })
+            CUSTOM_VAR: 'value',
+          }),
         })
       );
     });
@@ -132,11 +136,13 @@ describe('ProcessManager', () => {
 
       const task: TaskConfig = {
         command: 'invalid-command',
-        identifier: 'test'
+        identifier: 'test',
       };
 
       await expect(processManager.spawn(task)).rejects.toThrow(TasklyError);
-      await expect(processManager.spawn(task)).rejects.toThrow('Failed to spawn process');
+      await expect(processManager.spawn(task)).rejects.toThrow(
+        'Failed to spawn process'
+      );
     });
   });
 
@@ -144,13 +150,13 @@ describe('ProcessManager', () => {
     it('should terminate a running process', async () => {
       const task: TaskConfig = {
         command: 'echo test',
-        identifier: 'test'
+        identifier: 'test',
       };
 
       await processManager.spawn(task);
       const mockChild = getMockChildProcess();
       mockChild.kill.mockReturnValue(true);
-      
+
       const result = await processManager.terminate('test');
 
       expect(result).toBe(true);
@@ -165,13 +171,13 @@ describe('ProcessManager', () => {
     it('should use custom signal', async () => {
       const task: TaskConfig = {
         command: 'echo test',
-        identifier: 'test'
+        identifier: 'test',
       };
 
       await processManager.spawn(task);
       const mockChild = getMockChildProcess();
       mockChild.kill.mockReturnValue(true);
-      
+
       await processManager.terminate('test', 'SIGKILL');
 
       expect(mockChild.kill).toHaveBeenCalledWith('SIGKILL');
@@ -182,7 +188,7 @@ describe('ProcessManager', () => {
     it('should capture stdout output', async () => {
       const task: TaskConfig = {
         command: 'echo test',
-        identifier: 'test'
+        identifier: 'test',
       };
 
       const outputSpy = vi.fn();
@@ -195,18 +201,21 @@ describe('ProcessManager', () => {
       mockChild.stdout.emit('data', 'Hello\nWorld\n');
 
       expect(outputSpy).toHaveBeenCalledTimes(2);
-      expect(outputSpy).toHaveBeenCalledWith('test', expect.objectContaining({
-        identifier: 'test',
-        content: 'Hello',
-        type: 'stdout',
-        timestamp: expect.any(Number)
-      }));
+      expect(outputSpy).toHaveBeenCalledWith(
+        'test',
+        expect.objectContaining({
+          identifier: 'test',
+          content: 'Hello',
+          type: 'stdout',
+          timestamp: expect.any(Number),
+        })
+      );
     });
 
     it('should capture stderr output', async () => {
       const task: TaskConfig = {
         command: 'echo test',
-        identifier: 'test'
+        identifier: 'test',
       };
 
       const outputSpy = vi.fn();
@@ -218,18 +227,21 @@ describe('ProcessManager', () => {
       // Simulate stderr data
       mockChild.stderr.emit('data', 'Error message\n');
 
-      expect(outputSpy).toHaveBeenCalledWith('test', expect.objectContaining({
-        identifier: 'test',
-        content: 'Error message',
-        type: 'stderr',
-        timestamp: expect.any(Number)
-      }));
+      expect(outputSpy).toHaveBeenCalledWith(
+        'test',
+        expect.objectContaining({
+          identifier: 'test',
+          content: 'Error message',
+          type: 'stderr',
+          timestamp: expect.any(Number),
+        })
+      );
     });
 
     it('should handle line buffering correctly', async () => {
       const task: TaskConfig = {
         command: 'echo test',
-        identifier: 'test'
+        identifier: 'test',
       };
 
       const outputSpy = vi.fn();
@@ -243,18 +255,26 @@ describe('ProcessManager', () => {
       mockChild.stdout.emit('data', 'line\nComplete line\n');
 
       expect(outputSpy).toHaveBeenCalledTimes(2);
-      expect(outputSpy).toHaveBeenNthCalledWith(1, 'test', expect.objectContaining({
-        content: 'Partial line'
-      }));
-      expect(outputSpy).toHaveBeenNthCalledWith(2, 'test', expect.objectContaining({
-        content: 'Complete line'
-      }));
+      expect(outputSpy).toHaveBeenNthCalledWith(
+        1,
+        'test',
+        expect.objectContaining({
+          content: 'Partial line',
+        })
+      );
+      expect(outputSpy).toHaveBeenNthCalledWith(
+        2,
+        'test',
+        expect.objectContaining({
+          content: 'Complete line',
+        })
+      );
     });
 
     it('should format output lines with prefix', async () => {
       const task: TaskConfig = {
         command: 'echo test',
-        identifier: 'test'
+        identifier: 'test',
       };
 
       await processManager.spawn(task);
@@ -267,7 +287,9 @@ describe('ProcessManager', () => {
       outputBuffer.push('Hello World');
 
       const formatted = processManager.getFormattedOutput('test');
-      expect(formatted[0]).toMatch(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\] \[test\] Hello World$/);
+      expect(formatted[0]).toMatch(
+        /^\[\d{2}:\d{2}:\d{2}\.\d{3}\] \[test\] Hello World$/
+      );
     });
   });
 
@@ -275,7 +297,7 @@ describe('ProcessManager', () => {
     it('should handle process completion', async () => {
       const task: TaskConfig = {
         command: 'echo test',
-        identifier: 'test'
+        identifier: 'test',
       };
 
       const completeSpy = vi.fn();
@@ -294,19 +316,22 @@ describe('ProcessManager', () => {
       // Wait for completion
       await new Promise(resolve => setTimeout(resolve, 20));
 
-      expect(completeSpy).toHaveBeenCalledWith('test', expect.objectContaining({
-        identifier: 'test',
-        exitCode: 0,
-        duration: expect.any(Number),
-        startTime: expect.any(Number),
-        endTime: expect.any(Number)
-      }));
+      expect(completeSpy).toHaveBeenCalledWith(
+        'test',
+        expect.objectContaining({
+          identifier: 'test',
+          exitCode: 0,
+          duration: expect.any(Number),
+          startTime: expect.any(Number),
+          endTime: expect.any(Number),
+        })
+      );
     });
 
     it('should handle process errors', async () => {
       const task: TaskConfig = {
         command: 'echo test',
-        identifier: 'test'
+        identifier: 'test',
       };
 
       const errorSpy = vi.fn();
@@ -334,12 +359,12 @@ describe('ProcessManager', () => {
     it('should set up timeout control', async () => {
       const task: TaskConfig = {
         command: 'sleep 10',
-        identifier: 'test'
+        identifier: 'test',
       };
 
       const options: ProcessOptions = {
         timeout: 100,
-        killOnTimeout: true
+        killOnTimeout: true,
       };
 
       const timeoutSpy = vi.fn();
@@ -356,12 +381,12 @@ describe('ProcessManager', () => {
     it('should monitor resource usage', async () => {
       const task: TaskConfig = {
         command: 'echo test',
-        identifier: 'test'
+        identifier: 'test',
       };
 
       const options: ProcessOptions = {
         maxMemory: 256,
-        maxCpu: 80
+        maxCpu: 80,
       };
 
       const resourceSpy = vi.fn();
@@ -372,13 +397,16 @@ describe('ProcessManager', () => {
       // Wait for resource check
       await new Promise(resolve => setTimeout(resolve, 1100));
 
-      expect(resourceSpy).toHaveBeenCalledWith('test', expect.objectContaining({
-        pid: 12345,
-        limits: {
-          maxMemory: 256,
-          maxCpu: 80
-        }
-      }));
+      expect(resourceSpy).toHaveBeenCalledWith(
+        'test',
+        expect.objectContaining({
+          pid: 12345,
+          limits: {
+            maxMemory: 256,
+            maxCpu: 80,
+          },
+        })
+      );
     });
   });
 
@@ -386,7 +414,7 @@ describe('ProcessManager', () => {
     it('should check if process is running', async () => {
       const task: TaskConfig = {
         command: 'echo test',
-        identifier: 'test'
+        identifier: 'test',
       };
 
       expect(processManager.isRunning('test')).toBe(false);
@@ -398,7 +426,7 @@ describe('ProcessManager', () => {
     it('should get process info', async () => {
       const task: TaskConfig = {
         command: 'echo test',
-        identifier: 'test'
+        identifier: 'test',
       };
 
       expect(processManager.getProcessInfo('test')).toBeUndefined();
@@ -422,7 +450,7 @@ describe('ProcessManager', () => {
     it('should get captured output', async () => {
       const task: TaskConfig = {
         command: 'echo test',
-        identifier: 'test'
+        identifier: 'test',
       };
 
       await processManager.spawn(task);
@@ -459,7 +487,7 @@ describe('ProcessManager', () => {
     it('should clear all internal state on cleanup', async () => {
       const task: TaskConfig = {
         command: 'echo test',
-        identifier: 'test'
+        identifier: 'test',
       };
 
       await processManager.spawn(task);

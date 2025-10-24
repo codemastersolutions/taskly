@@ -19,7 +19,7 @@ describe('Taskly CLI E2E Tests', () => {
   beforeEach(() => {
     tempDir = resolve(process.cwd(), 'test-temp-e2e');
     cliPath = resolve(process.cwd(), 'dist/cjs/bin/taskly.js');
-    
+
     // Create temp directory
     if (!existsSync(tempDir)) {
       mkdirSync(tempDir, { recursive: true });
@@ -79,13 +79,13 @@ describe('Taskly CLI E2E Tests', () => {
       }
 
       const command = `node "${cliPath}" "echo Hello CLI"`;
-      
+
       try {
-        const { stdout, stderr } = await execAsync(command, { 
+        const { stdout, stderr } = await execAsync(command, {
           cwd: tempDir,
-          timeout: 10000 
+          timeout: 10000,
         });
-        
+
         expect(stdout).toContain('Hello CLI');
         expect(stdout).toContain('✅'); // Success indicator
       } catch (error: any) {
@@ -102,13 +102,13 @@ describe('Taskly CLI E2E Tests', () => {
       }
 
       const command = `node "${cliPath}" "echo Command 1" "echo Command 2"`;
-      
+
       try {
-        const { stdout } = await execAsync(command, { 
+        const { stdout } = await execAsync(command, {
           cwd: tempDir,
-          timeout: 10000 
+          timeout: 10000,
         });
-        
+
         expect(stdout).toContain('Command 1');
         expect(stdout).toContain('Command 2');
         expect(stdout).toContain('✅'); // Success indicator
@@ -125,13 +125,13 @@ describe('Taskly CLI E2E Tests', () => {
       }
 
       const command = `node "${cliPath}" --names "test1,test2" --verbose "echo Task 1" "echo Task 2"`;
-      
+
       try {
-        const { stdout } = await execAsync(command, { 
+        const { stdout } = await execAsync(command, {
           cwd: tempDir,
-          timeout: 10000 
+          timeout: 10000,
         });
-        
+
         expect(stdout).toContain('test1');
         expect(stdout).toContain('test2');
         expect(stdout).toContain('Task 1');
@@ -155,25 +155,25 @@ describe('Taskly CLI E2E Tests', () => {
         tasks: {
           hello: {
             command: 'echo "Hello from config"',
-            identifier: 'config-hello'
+            identifier: 'config-hello',
           },
           world: {
             command: 'echo "World from config"',
-            identifier: 'config-world'
-          }
-        }
+            identifier: 'config-world',
+          },
+        },
       };
 
       writeFileSync(configPath, JSON.stringify(config, null, 2));
 
       const command = `node "${cliPath}" --config "${configPath}"`;
-      
+
       try {
-        const { stdout } = await execAsync(command, { 
+        const { stdout } = await execAsync(command, {
           cwd: tempDir,
-          timeout: 10000 
+          timeout: 10000,
         });
-        
+
         expect(stdout).toContain('Hello from config');
         expect(stdout).toContain('World from config');
         expect(stdout).toContain('config-hello');
@@ -201,13 +201,13 @@ tasks:
       writeFileSync(configPath, yamlConfig);
 
       const command = `node "${cliPath}" --config "${configPath}"`;
-      
+
       try {
-        const { stdout } = await execAsync(command, { 
+        const { stdout } = await execAsync(command, {
           cwd: tempDir,
-          timeout: 10000 
+          timeout: 10000,
         });
-        
+
         expect(stdout).toContain('YAML config works');
         expect(stdout).toContain('yaml-task');
       } catch (error: any) {
@@ -231,20 +231,20 @@ tasks:
         version: '1.0.0',
         scripts: {
           hello: 'echo "Hello from npm script"',
-          world: 'echo "World from npm script"'
-        }
+          world: 'echo "World from npm script"',
+        },
       };
 
       writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2));
 
       const command = `node "${cliPath}" --package-manager npm "npm run hello" "npm run world"`;
-      
+
       try {
-        const { stdout } = await execAsync(command, { 
+        const { stdout } = await execAsync(command, {
           cwd: tempDir,
-          timeout: 15000 
+          timeout: 15000,
         });
-        
+
         expect(stdout).toContain('Hello from npm script');
         expect(stdout).toContain('World from npm script');
       } catch (error: any) {
@@ -265,20 +265,20 @@ tasks:
       writeFileSync(join(srcDir, 'index.js'), 'console.log("Hello World");');
 
       const distDir = join(tempDir, 'dist');
-      
+
       const isWindows = platform() === 'win32';
-      const copyCommand = isWindows 
+      const copyCommand = isWindows
         ? `xcopy "${srcDir}" "${distDir}" /E /I /Y`
         : `cp -r "${srcDir}" "${distDir}"`;
-      
+
       const command = `node "${cliPath}" --names "copy,verify" "${copyCommand}" "echo Build complete"`;
-      
+
       try {
-        const { stdout } = await execAsync(command, { 
+        const { stdout } = await execAsync(command, {
           cwd: tempDir,
-          timeout: 10000 
+          timeout: 10000,
         });
-        
+
         expect(stdout).toContain('Build complete');
         expect(existsSync(distDir)).toBe(true);
       } catch (error: any) {
@@ -294,16 +294,17 @@ tasks:
       }
 
       // Simulate starting multiple development processes
-      const sleepTime = platform() === 'win32' ? 'timeout /t 1 >nul' : 'sleep 1';
-      
+      const sleepTime =
+        platform() === 'win32' ? 'timeout /t 1 >nul' : 'sleep 1';
+
       const command = `node "${cliPath}" --names "server,watcher,linter" "${sleepTime} && echo Server started" "${sleepTime} && echo Watcher started" "${sleepTime} && echo Linter started"`;
-      
+
       try {
-        const { stdout } = await execAsync(command, { 
+        const { stdout } = await execAsync(command, {
           cwd: tempDir,
-          timeout: 15000 
+          timeout: 15000,
         });
-        
+
         expect(stdout).toContain('Server started');
         expect(stdout).toContain('Watcher started');
         expect(stdout).toContain('Linter started');
@@ -322,11 +323,11 @@ tasks:
       }
 
       const command = `node "${cliPath}" "exit 1"`;
-      
+
       try {
-        await execAsync(command, { 
+        await execAsync(command, {
           cwd: tempDir,
-          timeout: 10000 
+          timeout: 10000,
         });
         // Should not reach here
         expect(false).toBe(true);
@@ -346,11 +347,11 @@ tasks:
       writeFileSync(configPath, '{ invalid json }');
 
       const command = `node "${cliPath}" --config "${configPath}"`;
-      
+
       try {
-        await execAsync(command, { 
+        await execAsync(command, {
           cwd: tempDir,
-          timeout: 10000 
+          timeout: 10000,
         });
         // Should not reach here
         expect(false).toBe(true);
@@ -367,17 +368,19 @@ tasks:
       }
 
       const command = `node "${cliPath}" --config "nonexistent.json"`;
-      
+
       try {
-        await execAsync(command, { 
+        await execAsync(command, {
           cwd: tempDir,
-          timeout: 10000 
+          timeout: 10000,
         });
         // Should not reach here
         expect(false).toBe(true);
       } catch (error: any) {
         expect(error.code).toBe(1);
-        expect(error.stderr || error.stdout).toContain('Configuration file not found');
+        expect(error.stderr || error.stdout).toContain(
+          'Configuration file not found'
+        );
       }
     });
   });
@@ -389,17 +392,18 @@ tasks:
         return;
       }
 
-      const sleepTime = platform() === 'win32' ? 'timeout /t 1 >nul' : 'sleep 1';
+      const sleepTime =
+        platform() === 'win32' ? 'timeout /t 1 >nul' : 'sleep 1';
       const startTime = Date.now();
-      
+
       const command = `node "${cliPath}" "${sleepTime}" "${sleepTime}" "${sleepTime}"`;
-      
+
       try {
-        await execAsync(command, { 
+        await execAsync(command, {
           cwd: tempDir,
-          timeout: 15000 
+          timeout: 15000,
         });
-        
+
         const executionTime = Date.now() - startTime;
         // Should complete in roughly 1 second (parallel), not 3 seconds (sequential)
         expect(executionTime).toBeLessThan(2500);
@@ -415,17 +419,18 @@ tasks:
         return;
       }
 
-      const sleepTime = platform() === 'win32' ? 'timeout /t 1 >nul' : 'sleep 1';
+      const sleepTime =
+        platform() === 'win32' ? 'timeout /t 1 >nul' : 'sleep 1';
       const startTime = Date.now();
-      
+
       const command = `node "${cliPath}" --max-concurrency 1 "${sleepTime}" "${sleepTime}"`;
-      
+
       try {
-        await execAsync(command, { 
+        await execAsync(command, {
           cwd: tempDir,
-          timeout: 15000 
+          timeout: 15000,
         });
-        
+
         const executionTime = Date.now() - startTime;
         // Should take roughly 2 seconds (sequential) due to maxConcurrency: 1
         expect(executionTime).toBeGreaterThan(1800);
@@ -437,25 +442,26 @@ tasks:
   });
 
   describe('Signal Handling', () => {
-    it('should handle SIGINT gracefully', (done) => {
+    it('should handle SIGINT gracefully', done => {
       if (!existsSync(cliPath)) {
         console.warn('CLI binary not found, skipping E2E test');
         done();
         return;
       }
 
-      const sleepTime = platform() === 'win32' ? 'timeout /t 5 >nul' : 'sleep 5';
+      const sleepTime =
+        platform() === 'win32' ? 'timeout /t 5 >nul' : 'sleep 5';
       const child = spawn('node', [cliPath, sleepTime], {
         cwd: tempDir,
-        stdio: 'pipe'
+        stdio: 'pipe',
       });
 
       let output = '';
-      child.stdout.on('data', (data) => {
+      child.stdout.on('data', data => {
         output += data.toString();
       });
 
-      child.stderr.on('data', (data) => {
+      child.stderr.on('data', data => {
         output += data.toString();
       });
 
