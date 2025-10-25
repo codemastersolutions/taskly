@@ -55,6 +55,12 @@ export interface TaskResult {
   startTime: number;
   /** End timestamp */
   endTime: number;
+  /** Whether the task was terminated due to timeout */
+  timedOut?: boolean;
+  /** Whether the task was terminated by signal */
+  terminated?: boolean;
+  /** Whether the task was killed by kill-others-on-fail */
+  killedBySignal?: boolean;
 }
 
 // Main Taskly Options Interface

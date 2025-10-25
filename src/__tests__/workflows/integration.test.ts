@@ -305,6 +305,10 @@ function simulateBuildValidation() {
 
 function simulateVersionManagement() {
   try {
+    // Simulate git commands that could fail
+    mockExecSync('git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo ""');
+    mockExecSync('git log --oneline --pretty=format:"%s" HEAD^..HEAD');
+
     // Simulate version analysis
     const currentVersion = '1.0.0';
     const newVersion = '1.1.0';

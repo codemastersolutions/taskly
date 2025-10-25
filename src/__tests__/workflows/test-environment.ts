@@ -81,11 +81,22 @@ export function setupTestEnvironment(
 /**
  * Validate test environment for workflow execution
  */
-export function validateTestEnvironment(): ValidationResult {
+export function validateTestEnvironment(
+  skipSetup: boolean = false
+): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  const environment = setupTestEnvironment();
+  const environment = skipSetup
+    ? {
+        workspaceRoot: process.cwd(),
+        githubWorkspace: process.env.GITHUB_WORKSPACE || process.cwd(),
+        nodeVersion: process.version,
+        npmVersion: 'unknown',
+        gitRepository: 'test/repo',
+        gitBranch: 'main',
+      }
+    : setupTestEnvironment();
 
   // Check required environment variables
   const requiredEnvVars = [
@@ -161,11 +172,25 @@ export function validateTestEnvironment(): ValidationResult {
     'workflows'
   );
   if (fs.existsSync(workflowDir)) {
-    const workflowFiles = fs
-      .readdirSync(workflowDir)
-      .filter(file => file.endsWith('.yml') || file.endsWith('.yaml'));
-    if (workflowFiles.length === 0) {
-      warnings.push('No workflow files found in .github/workflows');
+    try {
+      const dirContents = fs.readdirSync(workflowDir);
+      // Handle case where readdirSync returns undefined (in mocked environments)
+      if (dirContents === undefined || dirContents === null) {
+        warnings.push('Unable to read .github/workflows directory contents');
+      } else {
+        const workflowFiles = Array.isArray(dirContents)
+          ? dirContents.filter(
+              file => file.endsWith('.yml') || file.endsWith('.yaml')
+            )
+          : [];
+        if (workflowFiles.length === 0) {
+          warnings.push('No workflow files found in .github/workflows');
+        }
+      }
+    } catch (error) {
+      warnings.push(
+        `Error reading .github/workflows directory: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   } else {
     warnings.push('.github/workflows directory does not exist');

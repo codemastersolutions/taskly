@@ -445,6 +445,7 @@ describe('Workflow Scripts Unit Tests', () => {
         try {
           // Step 1: Success
           mockExecSync.mockReturnValueOnce('');
+          execSync('npm install'); // This will use the first mock
           steps.push({ name: 'Setup', success: true });
 
           // Step 2: Failure
@@ -452,7 +453,10 @@ describe('Workflow Scripts Unit Tests', () => {
             throw new Error('Test failed');
           });
 
-          return { success: false, steps };
+          execSync('npm test'); // This will trigger the error
+          steps.push({ name: 'Tests', success: true }); // This won't be reached
+
+          return { success: true, steps };
         } catch (error) {
           steps.push({ name: 'Tests', success: false, error: error.message });
           return { success: false, error: error.message, steps };

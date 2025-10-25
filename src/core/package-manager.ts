@@ -1,7 +1,7 @@
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { PackageManager, TasklyError, ERROR_CODES } from '../types/index.js';
+import { ERROR_CODES, PackageManager, TasklyError } from '../types/index.js';
 
 /**
  * Package manager detection and validation utility
@@ -129,7 +129,7 @@ export class PackageManagerDetector {
    * @param cwd Directory to check for lock files
    * @returns Detected package manager or null if none found
    */
-  private static detectFromLockFiles(cwd: string): PackageManager | null {
+  public static detectFromLockFiles(cwd: string): PackageManager | null {
     for (const [lockFile, pm] of Object.entries(this.LOCK_FILE_MAP)) {
       const lockFilePath = join(cwd, lockFile);
       if (existsSync(lockFilePath)) {
@@ -349,5 +349,25 @@ export class PackageManagerDetector {
     if (lowerPath.includes('bun')) return 'bun';
 
     return null;
+  }
+
+  // Instance methods for backward compatibility with integration tests
+
+  /**
+   * Instance method: Check if a package manager is available in the system PATH
+   * @param pm Package manager to check
+   * @returns True if available, false otherwise
+   */
+  public isAvailable(pm: PackageManager): boolean {
+    return PackageManagerDetector.isAvailable(pm);
+  }
+
+  /**
+   * Instance method: Detect package manager from lock files in the given directory
+   * @param cwd Directory to check for lock files
+   * @returns Detected package manager or null if none found
+   */
+  public detectFromLockFiles(cwd: string): PackageManager | null {
+    return PackageManagerDetector.detectFromLockFiles(cwd);
   }
 }

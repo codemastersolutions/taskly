@@ -158,6 +158,32 @@ export class ProcessManager extends EventEmitter {
 
       if (killed) {
         this.emit('process:terminate', identifier, signal);
+
+        // Create a termination result immediately if the process was killed
+        const endTime = Date.now();
+        const duration = endTime - processInfo.startTime;
+        const outputBuffer = this.outputBuffers.get(identifier) || [];
+
+        const exitCode = signal === 'SIGKILL' ? 137 : 130; // Standard signal exit codes
+
+        const result: TaskResult = {
+          identifier,
+          exitCode,
+          output: [...outputBuffer],
+          duration,
+          startTime: processInfo.startTime,
+          endTime,
+          error: `Process terminated by signal ${signal}`,
+          terminated: true,
+          killedBySignal: true,
+        };
+
+        // Clean up references and resources
+        this.processes.delete(identifier);
+        this.cleanupProcess(identifier);
+
+        // Emit completion with termination result
+        this.emit('process:complete', identifier, result);
       }
 
       return killed;
@@ -453,6 +479,11 @@ export class ProcessManager extends EventEmitter {
     childProcess.on(
       'close',
       (code: number | null, signal: NodeJS.Signals | null) => {
+        // Check if this process was already handled (e.g., by timeout or manual termination)
+        if (!this.processes.has(identifier)) {
+          return; // Already handled, don't emit duplicate completion
+        }
+
         const endTime = Date.now();
         const duration = endTime - processInfo.startTime;
 
@@ -564,7 +595,7 @@ export class ProcessManager extends EventEmitter {
    */
   private setupTimeoutControl(
     identifier: string,
-    _childProcess: ChildProcess,
+    childProcess: ChildProcess,
     options: ProcessOptions
   ): void {
     if (!options.timeout || options.timeout <= 0) {
@@ -577,7 +608,48 @@ export class ProcessManager extends EventEmitter {
         this.emit('process:timeout', identifier, options.timeout);
 
         if (options.killOnTimeout) {
-          this.terminate(identifier, 'SIGKILL').catch(error => {
+          try {
+            // Mark as killed due to timeout
+            processInfo.status = 'killed';
+
+            // Kill the process forcefully
+            const killed = childProcess.kill('SIGKILL');
+
+            if (killed) {
+              // Create a timeout result immediately
+              const endTime = Date.now();
+              const duration = endTime - processInfo.startTime;
+              const outputBuffer = this.outputBuffers.get(identifier) || [];
+
+              const result: TaskResult = {
+                identifier,
+                exitCode: 124, // Standard timeout exit code
+                output: [...outputBuffer],
+                duration,
+                startTime: processInfo.startTime,
+                endTime,
+                error: `Task timed out after ${options.timeout}ms`,
+                timedOut: true,
+              };
+
+              // Clean up references and resources
+              this.processes.delete(identifier);
+              this.cleanupProcess(identifier);
+
+              // Emit completion with timeout result
+              this.emit('process:complete', identifier, result);
+            } else {
+              this.emit(
+                'process:error',
+                identifier,
+                new TasklyError(
+                  `Failed to kill process on timeout`,
+                  ERROR_CODES.SYSTEM_ERROR,
+                  { taskId: identifier }
+                )
+              );
+            }
+          } catch (error) {
             this.emit(
               'process:error',
               identifier,
@@ -587,7 +659,7 @@ export class ProcessManager extends EventEmitter {
                 { taskId: identifier }
               )
             );
-          });
+          }
         }
       }
     }, options.timeout);

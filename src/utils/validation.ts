@@ -188,8 +188,17 @@ export function validateColor(color: string): ValidationResult {
   }
 
   // Check if it's an RGB color
-  if (/^rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\)$/i.test(trimmed)) {
-    return { valid: true, errors, warnings };
+  const rgbMatch =
+    /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i.exec(trimmed);
+  if (rgbMatch) {
+    const [, r, g, b] = rgbMatch;
+    const red = parseInt(r, 10);
+    const green = parseInt(g, 10);
+    const blue = parseInt(b, 10);
+
+    if (red <= 255 && green <= 255 && blue <= 255) {
+      return { valid: true, errors, warnings };
+    }
   }
 
   errors.push(

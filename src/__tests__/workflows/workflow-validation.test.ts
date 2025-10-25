@@ -84,11 +84,18 @@ describe('Workflow Validation Tests', () => {
     });
 
     it('should detect missing environment variables', () => {
-      // Don't set up environment
+      // Remove required variables
       delete process.env.GITHUB_ACTIONS;
       delete process.env.GITHUB_WORKSPACE;
 
-      const result = validateTestEnvironment();
+      // Mock file system
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(
+        JSON.stringify({ name: 'test-project', version: '1.0.0' })
+      );
+      mockFs.readdirSync.mockReturnValue(['workflow.yml']);
+
+      const result = validateTestEnvironment(true); // Skip setup to test missing variables
 
       expect(result.valid).toBe(false);
       expect(
@@ -351,6 +358,7 @@ jobs:
 
       // Mock required files and commands
       mockFs.existsSync.mockReturnValue(true);
+      mockFs.readdirSync.mockReturnValue(['ci.yml', 'release.yml'] as any);
       mockFs.readFileSync.mockReturnValue(
         JSON.stringify({
           name: 'test-package',

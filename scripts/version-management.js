@@ -129,6 +129,10 @@ function getCurrentVersion() {
     return packageJson.version;
   } catch (error) {
     console.error('❌ Error reading current version:', error.message);
+    // In test environment, throw the error instead of exiting
+    if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+      throw error;
+    }
     process.exit(1);
   }
 }

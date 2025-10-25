@@ -283,9 +283,14 @@ jobs:
 
   // Generate mock SHAs
   generateShas: (count: number = 5) => {
-    return Array.from({ length: count }, () =>
-      Math.random().toString(36).substr(2, 40)
-    );
+    return Array.from({ length: count }, () => {
+      // Generate a 40-character SHA by combining multiple random strings
+      let sha = '';
+      while (sha.length < 40) {
+        sha += Math.random().toString(36).substr(2);
+      }
+      return sha.substr(0, 40);
+    });
   },
 };
 

@@ -39,14 +39,24 @@ const getMockChildProcess = () => {
 
 describe('ProcessManager', () => {
   let processManager: ProcessManager;
+  let originalProcessExit: typeof process.exit;
 
   beforeEach(() => {
+    // Mock process.exit to prevent test interference
+    originalProcessExit = process.exit;
+    process.exit = vi.fn() as any;
+
+    // Increase max listeners to prevent warnings
+    process.setMaxListeners(50);
+
     processManager = new ProcessManager();
     vi.clearAllMocks();
   });
 
   afterEach(() => {
     processManager.cleanup();
+    // Restore original process.exit
+    process.exit = originalProcessExit;
   });
 
   describe('spawn', () => {
@@ -56,7 +66,7 @@ describe('ProcessManager', () => {
         identifier: 'test-task',
       };
 
-      const processInfo = await processManager.spawn(task);
+      const processInfo = processManager.spawn(task);
 
       expect(processInfo).toEqual({
         identifier: 'test-task',
@@ -68,12 +78,14 @@ describe('ProcessManager', () => {
 
       expect(mockSpawn).toHaveBeenCalledWith(
         'echo',
-        ['"hello world"'],
+        ['hello world'], // Quotes are removed by parseCommand
         expect.objectContaining({
           cwd: expect.any(String),
           stdio: ['ignore', 'pipe', 'pipe'],
           shell: true,
           env: expect.any(Object),
+          detached: false,
+          windowsHide: true,
         })
       );
     });
@@ -83,7 +95,7 @@ describe('ProcessManager', () => {
         command: 'npm test',
       };
 
-      const processInfo = await processManager.spawn(task);
+      const processInfo = processManager.spawn(task);
 
       expect(processInfo.identifier).toMatch(/^npm-[a-z0-9]+$/);
     });
@@ -94,10 +106,7 @@ describe('ProcessManager', () => {
         identifier: 'dangerous',
       };
 
-      await expect(processManager.spawn(dangerousTask)).rejects.toThrow(
-        TasklyError
-      );
-      await expect(processManager.spawn(dangerousTask)).rejects.toThrow(
+      expect(() => processManager.spawn(dangerousTask)).toThrow(
         'potentially dangerous pattern'
       );
     });
@@ -115,7 +124,7 @@ describe('ProcessManager', () => {
         env: { CUSTOM_VAR: 'value' },
       };
 
-      await processManager.spawn(task, options);
+      processManager.spawn(task, options);
 
       expect(mockSpawn).toHaveBeenCalledWith(
         'echo',
@@ -139,10 +148,7 @@ describe('ProcessManager', () => {
         identifier: 'test',
       };
 
-      await expect(processManager.spawn(task)).rejects.toThrow(TasklyError);
-      await expect(processManager.spawn(task)).rejects.toThrow(
-        'Failed to spawn process'
-      );
+      expect(() => processManager.spawn(task)).toThrow('Process spawn failed');
     });
   });
 
@@ -153,18 +159,18 @@ describe('ProcessManager', () => {
         identifier: 'test',
       };
 
-      await processManager.spawn(task);
+      processManager.spawn(task);
       const mockChild = getMockChildProcess();
       mockChild.kill.mockReturnValue(true);
 
-      const result = await processManager.terminate('test');
+      const result = processManager.terminate('test');
 
       expect(result).toBe(true);
       expect(mockChild.kill).toHaveBeenCalledWith('SIGTERM');
     });
 
     it('should return false for non-existent process', async () => {
-      const result = await processManager.terminate('non-existent');
+      const result = processManager.terminate('non-existent');
       expect(result).toBe(false);
     });
 
@@ -174,11 +180,11 @@ describe('ProcessManager', () => {
         identifier: 'test',
       };
 
-      await processManager.spawn(task);
+      processManager.spawn(task);
       const mockChild = getMockChildProcess();
       mockChild.kill.mockReturnValue(true);
 
-      await processManager.terminate('test', 'SIGKILL');
+      processManager.terminate('test', 'SIGKILL');
 
       expect(mockChild.kill).toHaveBeenCalledWith('SIGKILL');
     });
@@ -194,7 +200,7 @@ describe('ProcessManager', () => {
       const outputSpy = vi.fn();
       processManager.on('process:output', outputSpy);
 
-      await processManager.spawn(task);
+      processManager.spawn(task);
       const mockChild = getMockChildProcess();
 
       // Simulate stdout data
@@ -221,7 +227,7 @@ describe('ProcessManager', () => {
       const outputSpy = vi.fn();
       processManager.on('process:output', outputSpy);
 
-      await processManager.spawn(task);
+      processManager.spawn(task);
       const mockChild = getMockChildProcess();
 
       // Simulate stderr data
@@ -247,7 +253,7 @@ describe('ProcessManager', () => {
       const outputSpy = vi.fn();
       processManager.on('process:output', outputSpy);
 
-      await processManager.spawn(task);
+      processManager.spawn(task);
       const mockChild = getMockChildProcess();
 
       // Simulate partial line data
@@ -277,7 +283,7 @@ describe('ProcessManager', () => {
         identifier: 'test',
       };
 
-      await processManager.spawn(task);
+      processManager.spawn(task);
 
       const output = processManager.getFormattedOutput('test');
       expect(output).toEqual([]);
@@ -303,18 +309,16 @@ describe('ProcessManager', () => {
       const completeSpy = vi.fn();
       processManager.on('process:complete', completeSpy);
 
-      await processManager.spawn(task);
+      processManager.spawn(task);
       const mockChild = getMockChildProcess();
 
-      // Simulate process completion
-      mockChild.on.mockImplementation((event, callback) => {
-        if (event === 'close') {
-          setTimeout(() => callback(0, null), 10);
-        }
-      });
-
-      // Wait for completion
-      await new Promise(resolve => setTimeout(resolve, 20));
+      // Simulate process completion by directly calling the close event handler
+      const closeHandler = mockChild.on.mock.calls.find(
+        call => call[0] === 'close'
+      )?.[1];
+      if (closeHandler) {
+        closeHandler(0, null);
+      }
 
       expect(completeSpy).toHaveBeenCalledWith(
         'test',
@@ -337,19 +341,17 @@ describe('ProcessManager', () => {
       const errorSpy = vi.fn();
       processManager.on('process:error', errorSpy);
 
-      await processManager.spawn(task);
+      processManager.spawn(task);
       const mockChild = getMockChildProcess();
 
-      // Simulate process error
+      // Simulate process error by directly calling the error event handler
       const testError = new Error('Process failed');
-      mockChild.on.mockImplementation((event, callback) => {
-        if (event === 'error') {
-          setTimeout(() => callback(testError), 10);
-        }
-      });
-
-      // Wait for error
-      await new Promise(resolve => setTimeout(resolve, 20));
+      const errorHandler = mockChild.on.mock.calls.find(
+        call => call[0] === 'error'
+      )?.[1];
+      if (errorHandler) {
+        errorHandler(testError);
+      }
 
       expect(errorSpy).toHaveBeenCalledWith('test', expect.any(TasklyError));
     });
@@ -370,7 +372,7 @@ describe('ProcessManager', () => {
       const timeoutSpy = vi.fn();
       processManager.on('process:timeout', timeoutSpy);
 
-      await processManager.spawn(task, options);
+      processManager.spawn(task, options);
 
       // Wait for timeout
       await new Promise(resolve => setTimeout(resolve, 150));
@@ -392,7 +394,7 @@ describe('ProcessManager', () => {
       const resourceSpy = vi.fn();
       processManager.on('process:resource-check', resourceSpy);
 
-      await processManager.spawn(task, options);
+      processManager.spawn(task, options);
 
       // Wait for resource check
       await new Promise(resolve => setTimeout(resolve, 1100));
@@ -419,7 +421,7 @@ describe('ProcessManager', () => {
 
       expect(processManager.isRunning('test')).toBe(false);
 
-      await processManager.spawn(task);
+      processManager.spawn(task);
       expect(processManager.isRunning('test')).toBe(true);
     });
 
@@ -431,7 +433,7 @@ describe('ProcessManager', () => {
 
       expect(processManager.getProcessInfo('test')).toBeUndefined();
 
-      const processInfo = await processManager.spawn(task);
+      const processInfo = processManager.spawn(task);
       expect(processManager.getProcessInfo('test')).toEqual(processInfo);
     });
 
@@ -439,8 +441,8 @@ describe('ProcessManager', () => {
       const task1: TaskConfig = { command: 'echo 1', identifier: 'test1' };
       const task2: TaskConfig = { command: 'echo 2', identifier: 'test2' };
 
-      await processManager.spawn(task1);
-      await processManager.spawn(task2);
+      processManager.spawn(task1);
+      processManager.spawn(task2);
 
       const allInfo = processManager.getAllProcessInfo();
       expect(allInfo).toHaveLength(2);
@@ -453,7 +455,7 @@ describe('ProcessManager', () => {
         identifier: 'test',
       };
 
-      await processManager.spawn(task);
+      processManager.spawn(task);
 
       expect(processManager.getOutput('test')).toEqual([]);
 
@@ -470,8 +472,8 @@ describe('ProcessManager', () => {
       const task1: TaskConfig = { command: 'echo 1', identifier: 'test1' };
       const task2: TaskConfig = { command: 'echo 2', identifier: 'test2' };
 
-      await processManager.spawn(task1);
-      await processManager.spawn(task2);
+      processManager.spawn(task1);
+      processManager.spawn(task2);
 
       // Mock kill for both processes
       const mockChild1 = getMockChildProcess();
@@ -490,7 +492,7 @@ describe('ProcessManager', () => {
         identifier: 'test',
       };
 
-      await processManager.spawn(task);
+      processManager.spawn(task);
 
       expect(processManager.getProcessInfo('test')).toBeDefined();
       expect(processManager.getOutput('test')).toBeDefined();

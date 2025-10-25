@@ -1,23 +1,23 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  validateCommand,
-  sanitizeCommand,
-  validateIdentifier,
-  validateColor,
-  validatePackageManager,
-  validateWorkingDirectory,
-  validateTaskConfig,
-  validateTasklyOptions,
-  validateCLIOptions,
-  createValidationError,
-  validateOrThrow,
-} from '../../utils/validation.js';
-import {
-  TaskConfig,
-  TasklyOptions,
   CLIOptions,
   ERROR_CODES,
+  TaskConfig,
+  TasklyOptions,
 } from '../../types/index.js';
+import {
+  createValidationError,
+  sanitizeCommand,
+  validateCLIOptions,
+  validateColor,
+  validateCommand,
+  validateIdentifier,
+  validateOrThrow,
+  validatePackageManager,
+  validateTaskConfig,
+  validateTasklyOptions,
+  validateWorkingDirectory,
+} from '../../utils/validation.js';
 
 describe('Validation Utils', () => {
   describe('validateCommand', () => {
@@ -29,6 +29,12 @@ describe('Validation Utils', () => {
 
     it('should reject empty commands', () => {
       const result = validateCommand('');
+      expect(result.valid).toBe(false);
+      expect(result.errors).toContain('Command must be a non-empty string');
+    });
+
+    it('should reject whitespace-only commands', () => {
+      const result = validateCommand('   ');
       expect(result.valid).toBe(false);
       expect(result.errors).toContain(
         'Command cannot be empty or whitespace only'

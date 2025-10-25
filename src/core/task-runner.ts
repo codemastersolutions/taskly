@@ -7,6 +7,7 @@ import {
   ERROR_CODES,
   ErrorFactory,
   OutputLine,
+  PackageManager,
   ProcessInfo,
   TaskConfig,
   TaskResult,
@@ -309,13 +310,25 @@ export class TaskRunner extends EventEmitter {
       }
       identifiers.add(identifier);
 
-      // Validate package manager if specified
+      // Resolve package manager with fallback handling
+      let resolvedPackageManager: PackageManager | undefined;
       if (task.packageManager) {
         try {
-          PackageManagerDetector.validate(task.packageManager);
+          const resolved = PackageManagerDetector.resolve(
+            task.packageManager,
+            task.cwd || process.cwd()
+          );
+          resolvedPackageManager = resolved.pm;
+
+          // Log fallback if different from requested
+          if (resolved.source !== 'preferred') {
+            console.warn(
+              `⚠️  Package manager '${task.packageManager}' not available for task "${identifier}", using '${resolved.pm}' instead (${resolved.source})`
+            );
+          }
         } catch (error) {
           throw new TasklyError(
-            `Invalid package manager for task "${identifier}": ${error instanceof Error ? error.message : String(error)}`,
+            `No package manager available for task "${identifier}": ${error instanceof Error ? error.message : String(error)}`,
             ERROR_CODES.PM_NOT_FOUND,
             { taskId: identifier },
             error instanceof Error ? error : undefined
@@ -326,9 +339,13 @@ export class TaskRunner extends EventEmitter {
       // Assign color
       this.colorManager.assignColor(identifier, task.color);
 
-      // Create task state
+      // Create task state with resolved package manager
       const taskState: TaskState = {
-        config: { ...task, identifier },
+        config: {
+          ...task,
+          identifier,
+          packageManager: resolvedPackageManager || task.packageManager,
+        },
         identifier,
         status: 'pending',
       };
@@ -618,6 +635,23 @@ export class TaskRunner extends EventEmitter {
         });
       }
     } else {
+      // Emit task:error event for non-zero exit codes
+      const tasklyError = new TasklyError(
+        `Task "${identifier}" failed with exit code ${result.exitCode}`,
+        ERROR_CODES.TASK_FAILED,
+        {
+          taskId: identifier,
+          command: taskState.config.command,
+          exitCode: result.exitCode,
+        }
+      );
+
+      this.emit('task:error', {
+        identifier,
+        error: tasklyError,
+        retries: this.retryCount.get(identifier) || 0,
+      });
+
       // Handle failure with retry logic
       await this.handleTaskFailure(taskState);
       return;
@@ -682,6 +716,7 @@ export class TaskRunner extends EventEmitter {
         taskState.endTime = Date.now();
         this.runningTasks.delete(identifier);
         this.currentConcurrency--;
+        this.killedTasks.add(identifier);
       }
 
       await this.processManager.terminate(identifier, 'SIGKILL');
@@ -691,6 +726,7 @@ export class TaskRunner extends EventEmitter {
     this.taskQueue.forEach(taskState => {
       taskState.status = 'killed';
       taskState.endTime = Date.now();
+      this.killedTasks.add(taskState.identifier);
     });
     this.taskQueue = [];
 

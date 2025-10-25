@@ -22,7 +22,6 @@ import {
   TaskResult,
   TasklyConfig,
   TasklyError,
-  getUserFriendlyMessage,
 } from '../types/index.js';
 import { ConfigLoader, loadConfig, mergeConfig } from './config.js';
 import { getHelp, parseArgs } from './parser.js';
@@ -39,6 +38,29 @@ export class TasklyCLI {
   constructor() {
     this.configLoader = new ConfigLoader();
     this.initializeErrorHandling();
+  }
+
+  /**
+   * Check if CLI should exit early for help or version flags
+   */
+  private shouldExitEarly(args: string[]): boolean {
+    // Check for help flags
+    if (args.includes('--help') || args.includes('-h')) {
+      // eslint-disable-next-line no-console -- CLI help output
+      console.log(getHelp());
+      process.exit(0);
+      return true;
+    }
+
+    // Check for version flags
+    if (args.includes('--version') || args.includes('-v')) {
+      // eslint-disable-next-line no-console -- CLI version output
+      console.log(this.getVersion());
+      process.exit(0);
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -66,50 +88,42 @@ export class TasklyCLI {
    * Main CLI entry point
    */
   async run(args?: string[]): Promise<void> {
+    // Wrap everything in try-catch to ensure no errors escape
     try {
-      // Parse command line arguments
-      const { options } = parseArgs(args);
-
-      // Handle help and version flags
-      if (options.help) {
-        // eslint-disable-next-line no-console -- CLI help output
-        console.log(getHelp());
-        process.exit(0);
+      // Check for help and version flags first, before any validation
+      const rawArgs = args ?? process.argv.slice(2);
+      if (this.shouldExitEarly(rawArgs)) {
+        return;
       }
 
-      if (options.version) {
-        // eslint-disable-next-line no-console -- CLI version output
-        console.log(this.getVersion());
-        process.exit(0);
+      try {
+        // Parse command line arguments (with validation)
+        const { options } = parseArgs(args);
+
+        // Load and merge configuration
+        const config = await loadConfig(options.config);
+        const mergedOptions = mergeConfig(config, options);
+
+        // Convert to task configurations
+        const tasks = this.createTaskConfigs(mergedOptions, config);
+
+        // Validate we have tasks to run
+        if (tasks.length === 0) {
+          throw new TasklyError(
+            'No tasks to execute. Provide commands or use a configuration file.',
+            ERROR_CODES.VALIDATION_ERROR
+          );
+        }
+
+        // Execute tasks
+        await this.executeTasks(tasks, mergedOptions);
+      } catch (error) {
+        // Handle the error and exit gracefully - never re-throw
+        this.handleError(error);
       }
-
-      // Load and merge configuration
-      const config = await loadConfig(options.config);
-      const mergedOptions = mergeConfig(config, options);
-
-      // Convert to task configurations
-      const tasks = this.createTaskConfigs(mergedOptions, config);
-
-      // Validate we have tasks to run
-      if (tasks.length === 0) {
-        throw new TasklyError(
-          'No tasks to execute. Provide commands or use a configuration file.',
-          ERROR_CODES.VALIDATION_ERROR
-        );
-      }
-
-      // Execute tasks
-      await this.executeTasks(tasks, mergedOptions);
-    } catch (error) {
-      // Handle error globally first
-      if (error instanceof TasklyError) {
-        handleGlobalError(error, {
-          context: 'cli-execution',
-          args: args ?? process.argv.slice(2),
-        });
-      }
-
-      this.handleError(error);
+    } catch (outerError) {
+      // Final safety net - should never reach here
+      this.handleError(outerError);
     }
   }
 
@@ -498,15 +512,21 @@ export class TasklyCLI {
    */
   private generateIdentifier(command: string, index: number): string {
     const commandName = command.trim().split(/\s+/)[0];
-    // Extract just the filename from paths like ./build.sh
-    const fileName = commandName.includes('/')
-      ? (commandName.split('/').pop() ?? commandName)
-      : commandName;
-    // Remove file extensions and special characters
-    const baseName = fileName
-      .replace(/\.[^.]*$/, '')
-      .replace(/[^a-zA-Z0-9]/g, '');
-    return `${baseName ?? 'task'}-${index}`;
+
+    // Extract just the filename from paths (handle both Unix and Windows paths)
+    let fileName = commandName;
+    if (commandName.includes('/') || commandName.includes('\\')) {
+      const parts = commandName.split(/[/\\]/);
+      fileName = parts[parts.length - 1] || commandName;
+    }
+
+    // Remove only the final file extension (not all dots)
+    const baseName = fileName.replace(/\.[^.]*$/, '');
+
+    // Remove special characters but keep alphanumeric
+    const sanitized = baseName.replace(/[^a-zA-Z0-9]/g, '');
+
+    return `${sanitized || 'task'}-${index}`;
   }
 
   /**
@@ -523,141 +543,225 @@ export class TasklyCLI {
   }
 
   /**
+   * Get error type prefix for consistent error message formatting
+   */
+  private getErrorTypePrefix(errorCode: string): string {
+    switch (errorCode) {
+      case ERROR_CODES.VALIDATION_ERROR:
+      case ERROR_CODES.INVALID_COMMAND:
+      case ERROR_CODES.INVALID_TASK_CONFIG:
+      case ERROR_CODES.INVALID_OPTIONS:
+      case ERROR_CODES.CLI_PARSE_ERROR:
+      case ERROR_CODES.CLI_INVALID_ARGUMENT:
+        return 'Validation Error';
+
+      case ERROR_CODES.CONFIG_ERROR:
+      case ERROR_CODES.CONFIG_FILE_NOT_FOUND:
+      case ERROR_CODES.CONFIG_PARSE_ERROR:
+        return 'Configuration Error';
+
+      case ERROR_CODES.PM_NOT_FOUND:
+      case ERROR_CODES.PM_DETECTION_FAILED:
+      case ERROR_CODES.PM_VALIDATION_FAILED:
+        return 'Package Manager Error';
+
+      case ERROR_CODES.SPAWN_FAILED:
+      case ERROR_CODES.PROCESS_TIMEOUT:
+      case ERROR_CODES.PROCESS_KILLED:
+      case ERROR_CODES.PROCESS_RESOURCE_LIMIT:
+        return 'Process Error';
+
+      case ERROR_CODES.TASK_FAILED:
+      case ERROR_CODES.TASK_DEPENDENCY_FAILED:
+      case ERROR_CODES.TASK_RETRY_EXHAUSTED:
+        return 'Task Execution Error';
+
+      case ERROR_CODES.SECURITY_VIOLATION:
+      case ERROR_CODES.COMMAND_INJECTION:
+        return 'Security Error';
+
+      case ERROR_CODES.SYSTEM_ERROR:
+      case ERROR_CODES.FILE_SYSTEM_ERROR:
+      case ERROR_CODES.PERMISSION_DENIED:
+      case ERROR_CODES.RESOURCE_EXHAUSTED:
+        return 'System Error';
+
+      case ERROR_CODES.COLOR_ASSIGNMENT_FAILED:
+      case ERROR_CODES.INVALID_COLOR:
+        return 'Color Error';
+
+      default:
+        return 'Error';
+    }
+  }
+
+  /**
    * Handle CLI errors with user-friendly messages
    */
   private handleError(error: unknown): void {
-    if (error instanceof TasklyError) {
-      // Use the user-friendly message system
-      const friendlyMessage = getUserFriendlyMessage(error);
-      // eslint-disable-next-line no-console -- CLI error message
-      console.error(`❌ ${friendlyMessage}`);
+    try {
+      if (error instanceof TasklyError) {
+        // Handle error globally first for logging
+        handleGlobalError(error, {
+          context: 'cli-execution',
+          args: process.argv.slice(2),
+        });
 
-      // Show detailed context if available
-      if (error.context.taskId) {
-        // eslint-disable-next-line no-console -- CLI error task context
-        console.error(`   Task: ${error.context.taskId}`);
-      }
+        // Format error message with consistent error type prefix
+        const errorTypePrefix = this.getErrorTypePrefix(error.code);
+        // eslint-disable-next-line no-console -- CLI error message
+        console.error(`❌ ${errorTypePrefix}: ${error.message}`);
 
-      if (error.context.command) {
-        // eslint-disable-next-line no-console -- CLI error command context
-        console.error(`   Command: ${error.context.command}`);
-      }
+        // Show detailed context if available
+        if (error.context.taskId) {
+          // eslint-disable-next-line no-console -- CLI error task context
+          console.error(`   Task: ${error.context.taskId}`);
+        }
 
-      // Show additional help based on error type
-      switch (error.code) {
-        case ERROR_CODES.VALIDATION_ERROR:
-        case ERROR_CODES.CLI_PARSE_ERROR:
-          // eslint-disable-next-line no-console -- CLI help suggestion
-          console.error('\n💡 Use --help for usage information.');
-          break;
+        if (error.context.command) {
+          // eslint-disable-next-line no-console -- CLI error command context
+          console.error(`   Command: ${error.context.command}`);
+        }
 
-        case ERROR_CODES.CONFIG_ERROR:
-        case ERROR_CODES.CONFIG_PARSE_ERROR:
-          // eslint-disable-next-line no-console -- CLI config error help
+        // Show additional help based on error type
+        switch (error.code) {
+          case ERROR_CODES.VALIDATION_ERROR:
+          case ERROR_CODES.CLI_PARSE_ERROR:
+          case ERROR_CODES.INVALID_COMMAND:
+          case ERROR_CODES.INVALID_TASK_CONFIG:
+          case ERROR_CODES.INVALID_OPTIONS:
+          case ERROR_CODES.CLI_INVALID_ARGUMENT:
+            // eslint-disable-next-line no-console -- CLI help suggestion
+            console.error('\n💡 Use --help for usage information.');
+            break;
+
+          case ERROR_CODES.CONFIG_ERROR:
+          case ERROR_CODES.CONFIG_PARSE_ERROR:
+          case ERROR_CODES.CONFIG_FILE_NOT_FOUND:
+            // eslint-disable-next-line no-console -- CLI config error help
+            console.error(
+              '\n💡 Check your configuration file syntax and content.'
+            );
+            break;
+
+          case ERROR_CODES.PM_NOT_FOUND:
+          case ERROR_CODES.PM_DETECTION_FAILED:
+          case ERROR_CODES.PM_VALIDATION_FAILED:
+            // eslint-disable-next-line no-console -- CLI package manager error help
+            console.error(
+              '\n💡 Ensure the specified package manager is installed and available in PATH.'
+            );
+            break;
+
+          case ERROR_CODES.SECURITY_VIOLATION:
+          case ERROR_CODES.COMMAND_INJECTION:
+            // eslint-disable-next-line no-console -- CLI security error warning
+            console.error(
+              '\n⚠️  This command was blocked for security reasons.'
+            );
+            // eslint-disable-next-line no-console -- CLI security error help
+            console.error(
+              "   Please review the command and ensure it's safe to execute."
+            );
+            break;
+
+          case ERROR_CODES.PERMISSION_DENIED:
+            // eslint-disable-next-line no-console -- CLI permission error help
+            console.error(
+              '\n💡 Try running with appropriate permissions or check file ownership.'
+            );
+            break;
+
+          case ERROR_CODES.RESOURCE_EXHAUSTED:
+            // eslint-disable-next-line no-console -- CLI resource error help
+            console.error(
+              '\n💡 Close other applications or increase system resources.'
+            );
+            break;
+        }
+
+        // Show detailed error information in verbose mode
+        const isVerbose =
+          process.env.TASKLY_VERBOSE === 'true' ||
+          process.argv.includes('--verbose');
+        if (isVerbose) {
+          // eslint-disable-next-line no-console -- CLI verbose error details header
+          console.error('\n🔍 Detailed Error Information:');
+          // eslint-disable-next-line no-console -- CLI verbose error code
+          console.error(`   Code: ${error.code}`);
+          // eslint-disable-next-line no-console -- CLI verbose error timestamp
           console.error(
-            '\n💡 Check your configuration file syntax and content.'
+            `   Timestamp: ${new Date(error.timestamp).toISOString()}`
           );
-          break;
 
-        case ERROR_CODES.PM_NOT_FOUND:
-        case ERROR_CODES.PM_DETECTION_FAILED:
-          // eslint-disable-next-line no-console -- CLI package manager error help
-          console.error(
-            '\n💡 Ensure the specified package manager is installed and available in PATH.'
-          );
-          break;
+          if (error.context && Object.keys(error.context).length > 0) {
+            // eslint-disable-next-line no-console -- CLI verbose error context
+            console.error(
+              `   Context: ${JSON.stringify(error.context, null, 2)}`
+            );
+          }
 
-        case ERROR_CODES.SECURITY_VIOLATION:
-        case ERROR_CODES.COMMAND_INJECTION:
-          // eslint-disable-next-line no-console -- CLI security error warning
-          console.error('\n⚠️  This command was blocked for security reasons.');
-          // eslint-disable-next-line no-console -- CLI security error help
-          console.error(
-            "   Please review the command and ensure it's safe to execute."
-          );
-          break;
+          if (error.originalError) {
+            // eslint-disable-next-line no-console -- CLI verbose original error header
+            console.error('\n📋 Original Error:');
+            // eslint-disable-next-line no-console -- CLI verbose original error details
+            console.error(error.originalError);
+          }
 
-        case ERROR_CODES.PERMISSION_DENIED:
-          // eslint-disable-next-line no-console -- CLI permission error help
-          console.error(
-            '\n💡 Try running with appropriate permissions or check file ownership.'
-          );
-          break;
+          if (error.stack) {
+            // eslint-disable-next-line no-console -- CLI verbose stack trace header
+            console.error('\n📚 Stack Trace:');
+            // eslint-disable-next-line no-console -- CLI verbose stack trace
+            console.error(error.stack);
+          }
+        }
 
-        case ERROR_CODES.RESOURCE_EXHAUSTED:
-          // eslint-disable-next-line no-console -- CLI resource error help
-          console.error(
-            '\n💡 Close other applications or increase system resources.'
-          );
-          break;
-      }
-
-      // Show detailed error information in verbose mode
-      const isVerbose =
-        process.env.TASKLY_VERBOSE === 'true' ||
-        process.argv.includes('--verbose');
-      if (isVerbose) {
-        // eslint-disable-next-line no-console -- CLI verbose error details header
-        console.error('\n🔍 Detailed Error Information:');
-        // eslint-disable-next-line no-console -- CLI verbose error code
-        console.error(`   Code: ${error.code}`);
-        // eslint-disable-next-line no-console -- CLI verbose error timestamp
+        // Only exit if not in test environment
+        if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+          process.exit(1);
+        }
+      } else {
+        // Handle unexpected errors
+        // eslint-disable-next-line no-console -- CLI unexpected error message
         console.error(
-          `   Timestamp: ${new Date(error.timestamp).toISOString()}`
+          `💥 Unexpected error: ${error instanceof Error ? error.message : String(error)}`
         );
 
-        if (error.context && Object.keys(error.context).length > 0) {
-          // eslint-disable-next-line no-console -- CLI verbose error context
-          console.error(
-            `   Context: ${JSON.stringify(error.context, null, 2)}`
-          );
-        }
-
-        if (error.originalError) {
-          // eslint-disable-next-line no-console -- CLI verbose original error header
-          console.error('\n📋 Original Error:');
-          // eslint-disable-next-line no-console -- CLI verbose original error details
-          console.error(error.originalError);
-        }
-
-        if (error.stack) {
-          // eslint-disable-next-line no-console -- CLI verbose stack trace header
-          console.error('\n📚 Stack Trace:');
-          // eslint-disable-next-line no-console -- CLI verbose stack trace
+        if (error instanceof Error && error.stack) {
+          // eslint-disable-next-line no-console -- CLI unexpected error stack trace header
+          console.error('\n📚 Stack trace:');
+          // eslint-disable-next-line no-console -- CLI unexpected error stack trace
           console.error(error.stack);
         }
+
+        // eslint-disable-next-line no-console -- CLI bug report instructions
+        console.error(
+          '\n🐛 This is likely a bug. Please report it with the following information:'
+        );
+        // eslint-disable-next-line no-console -- CLI bug report command info
+        console.error('   - Command that caused the error');
+        // eslint-disable-next-line no-console -- CLI bug report system info
+        console.error('   - Operating system and Node.js version');
+        // eslint-disable-next-line no-console -- CLI bug report error info
+        console.error('   - Full error message and stack trace above');
+        // eslint-disable-next-line no-console -- CLI bug report URL
+        console.error(
+          '\n📝 Report at: https://github.com/codemastersolutions/taskly/issues'
+        );
+        // Only exit if not in test environment
+        if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+          process.exit(1);
+        }
       }
-
-      process.exit(1);
-    } else {
-      // Handle unexpected errors
-      // eslint-disable-next-line no-console -- CLI unexpected error message
-      console.error(
-        `💥 Unexpected error: ${error instanceof Error ? error.message : String(error)}`
-      );
-
-      if (error instanceof Error && error.stack) {
-        // eslint-disable-next-line no-console -- CLI unexpected error stack trace header
-        console.error('\n📚 Stack trace:');
-        // eslint-disable-next-line no-console -- CLI unexpected error stack trace
-        console.error(error.stack);
+    } catch (handlerError) {
+      // If error handler itself throws, just log and exit
+      // eslint-disable-next-line no-console -- CLI error handler failure
+      console.error('Error in error handler:', handlerError);
+      // eslint-disable-next-line no-console -- CLI original error fallback
+      console.error('Original error:', error);
+      if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+        process.exit(1);
       }
-
-      // eslint-disable-next-line no-console -- CLI bug report instructions
-      console.error(
-        '\n🐛 This appears to be a bug. Please report it with the following information:'
-      );
-      // eslint-disable-next-line no-console -- CLI bug report command info
-      console.error('   - Command that caused the error');
-      // eslint-disable-next-line no-console -- CLI bug report system info
-      console.error('   - Operating system and Node.js version');
-      // eslint-disable-next-line no-console -- CLI bug report error info
-      console.error('   - Full error message and stack trace above');
-      // eslint-disable-next-line no-console -- CLI bug report URL
-      console.error(
-        '\n📝 Report at: https://github.com/codemastersolutions/taskly/issues'
-      );
-      process.exit(1);
     }
   }
 }

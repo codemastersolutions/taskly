@@ -8,6 +8,7 @@ import { extname, resolve } from 'path';
 import {
   CLIOptions,
   ERROR_CODES,
+  PackageManager,
   TaskConfig,
   TasklyConfig,
   TasklyError,
