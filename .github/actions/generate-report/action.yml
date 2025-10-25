@@ -1,0 +1,117 @@
+name: 'Generate Report'
+description: 'Generate formatted reports using templates'
+author: 'CodeMaster Solutions'
+
+inputs:
+  report-type:
+    description: 'Type of report to generate (quality, security, bundle, publication)'
+    required: true
+
+  data-file:
+    description: 'Path to JSON file containing report data'
+    required: false
+    default: ''
+
+  data-json:
+    description: 'JSON string containing report data (alternative to data-file)'
+    required: false
+    default: ''
+
+  output-file:
+    description: 'Output filename for the report'
+    required: false
+    default: ''
+
+  add-to-summary:
+    description: 'Add report to GitHub Step Summary'
+    required: false
+    default: 'true'
+
+  save-artifact:
+    description: 'Save report as workflow artifact'
+    required: false
+    default: 'false'
+
+outputs:
+  report-path:
+    description: 'Path to the generated report file'
+    value: ${{ steps.generate.outputs.report-path }}
+
+  report-content:
+    description: 'Content of the generated report'
+    value: ${{ steps.generate.outputs.report-content }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+
+    - name: Prepare data file
+      id: prepare-data
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.data-json }}" ]; then
+          echo '${{ inputs.data-json }}' > temp-report-data.json
+          echo "data-file=temp-report-data.json" >> $GITHUB_OUTPUT
+        elif [ -n "${{ inputs.data-file }}" ]; then
+          echo "data-file=${{ inputs.data-file }}" >> $GITHUB_OUTPUT
+        else
+          echo "Error: Either data-file or data-json must be provided"
+          exit 1
+        fi
+
+    - name: Generate report
+      id: generate
+      shell: bash
+      run: |
+        DATA_FILE="${{ steps.prepare-data.outputs.data-file }}"
+        REPORT_TYPE="${{ inputs.report-type }}"
+
+        # Generate the report
+        node ${{ github.action_path }}/../../scripts/report-generator.js "$REPORT_TYPE" "$DATA_FILE"
+
+        # Find the generated report file
+        REPORT_FILE=$(ls reports/${REPORT_TYPE}-report-*.md | head -1)
+
+        if [ -n "${{ inputs.output-file }}" ]; then
+          # Rename to custom filename
+          CUSTOM_FILE="reports/${{ inputs.output-file }}"
+          mv "$REPORT_FILE" "$CUSTOM_FILE"
+          REPORT_FILE="$CUSTOM_FILE"
+        fi
+
+        echo "report-path=$REPORT_FILE" >> $GITHUB_OUTPUT
+
+        # Read report content for output
+        REPORT_CONTENT=$(cat "$REPORT_FILE")
+        {
+          echo 'report-content<<EOF'
+          echo "$REPORT_CONTENT"
+          echo 'EOF'
+        } >> $GITHUB_OUTPUT
+
+        echo "✅ Report generated: $REPORT_FILE"
+
+    - name: Add to Step Summary
+      if: inputs.add-to-summary == 'true'
+      shell: bash
+      run: |
+        echo "## 📊 Generated Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        cat "${{ steps.generate.outputs.report-path }}" >> $GITHUB_STEP_SUMMARY
+
+    - name: Upload report artifact
+      if: inputs.save-artifact == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.report-type }}-report-${{ github.run_number }}
+        path: ${{ steps.generate.outputs.report-path }}
+        retention-days: 30
+
+    - name: Cleanup temporary files
+      shell: bash
+      run: |
+        rm -f temp-report-data.json

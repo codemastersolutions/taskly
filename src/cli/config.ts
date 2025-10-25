@@ -3,15 +3,27 @@
  * Handles loading and parsing of Taskly configuration files
  */
 
-import { readFileSync, existsSync } from 'fs';
-import { resolve, extname } from 'path';
-import { TasklyConfig, TasklyError, ERROR_CODES, CLIOptions, TaskConfig } from '../types/index.js';
+import { existsSync, readFileSync } from 'fs';
+import { extname, resolve } from 'path';
+import {
+  CLIOptions,
+  ERROR_CODES,
+  TaskConfig,
+  TasklyConfig,
+  TasklyError,
+} from '../types/index.js';
 
 /**
  * Configuration loader class
  */
 export class ConfigLoader {
-  private readonly supportedExtensions = ['.json', '.yaml', '.yml', '.js', '.mjs'];
+  private readonly supportedExtensions = [
+    '.json',
+    '.yaml',
+    '.yml',
+    '.js',
+    '.mjs',
+  ];
   private readonly defaultConfigNames = [
     'taskly.config.json',
     'taskly.config.yaml',
@@ -22,15 +34,18 @@ export class ConfigLoader {
     '.tasklyrc.yaml',
     '.tasklyrc.yml',
     '.tasklyrc.js',
-    '.tasklyrc.mjs'
+    '.tasklyrc.mjs',
   ];
 
   /**
    * Load configuration from file or auto-discover
    */
-  async loadConfig(configPath?: string, cwd: string = process.cwd()): Promise<TasklyConfig | null> {
+  async loadConfig(
+    configPath?: string,
+    cwd: string = process.cwd()
+  ): Promise<TasklyConfig | null> {
     try {
-      const resolvedPath = configPath 
+      const resolvedPath = configPath
         ? this.resolveConfigPath(configPath, cwd)
         : this.findConfigFile(cwd);
 
@@ -43,7 +58,7 @@ export class ConfigLoader {
       if (error instanceof TasklyError) {
         throw error;
       }
-      
+
       throw new TasklyError(
         `Failed to load configuration: ${error instanceof Error ? error.message : String(error)}`,
         ERROR_CODES.CONFIG_ERROR,
@@ -56,10 +71,13 @@ export class ConfigLoader {
   /**
    * Merge CLI options with configuration and environment variables
    */
-  mergeWithCLIOptions(config: TasklyConfig | null, cliOptions: CLIOptions): CLIOptions {
+  mergeWithCLIOptions(
+    config: TasklyConfig | null,
+    cliOptions: CLIOptions
+  ): CLIOptions {
     // Start with environment variables as base
     const envOptions = this.loadEnvironmentVariables();
-    
+
     // Merge in order: env -> config -> CLI (CLI has highest priority)
     const merged: CLIOptions = { ...cliOptions };
 
@@ -69,15 +87,24 @@ export class ConfigLoader {
         merged.packageManager = config.packageManager;
       }
 
-      if (merged.killOthersOnFail === undefined && config.killOthersOnFail !== undefined) {
+      if (
+        merged.killOthersOnFail === undefined &&
+        config.killOthersOnFail !== undefined
+      ) {
         merged.killOthersOnFail = config.killOthersOnFail;
       }
 
-      if (merged.maxConcurrency === undefined && config.maxConcurrency !== undefined) {
+      if (
+        merged.maxConcurrency === undefined &&
+        config.maxConcurrency !== undefined
+      ) {
         merged.maxConcurrency = config.maxConcurrency;
       }
 
-      if (merged.verbose === undefined && config.options?.verbose !== undefined) {
+      if (
+        merged.verbose === undefined &&
+        config.options?.verbose !== undefined
+      ) {
         merged.verbose = config.options.verbose;
       }
 
@@ -92,11 +119,17 @@ export class ConfigLoader {
       merged.packageManager = envOptions.packageManager;
     }
 
-    if (merged.killOthersOnFail === undefined && envOptions.killOthersOnFail !== undefined) {
+    if (
+      merged.killOthersOnFail === undefined &&
+      envOptions.killOthersOnFail !== undefined
+    ) {
       merged.killOthersOnFail = envOptions.killOthersOnFail;
     }
 
-    if (merged.maxConcurrency === undefined && envOptions.maxConcurrency !== undefined) {
+    if (
+      merged.maxConcurrency === undefined &&
+      envOptions.maxConcurrency !== undefined
+    ) {
       merged.maxConcurrency = envOptions.maxConcurrency;
     }
 
@@ -130,13 +163,15 @@ export class ConfigLoader {
     if (env.TASKLY_PACKAGE_MANAGER) {
       const pm = env.TASKLY_PACKAGE_MANAGER.toLowerCase();
       if (['npm', 'yarn', 'pnpm', 'bun'].includes(pm)) {
-        options.packageManager = pm as any;
+        options.packageManager = pm as PackageManager;
       }
     }
 
     // TASKLY_KILL_OTHERS_ON_FAIL
     if (env.TASKLY_KILL_OTHERS_ON_FAIL) {
-      options.killOthersOnFail = this.parseBoolean(env.TASKLY_KILL_OTHERS_ON_FAIL);
+      options.killOthersOnFail = this.parseBoolean(
+        env.TASKLY_KILL_OTHERS_ON_FAIL
+      );
     }
 
     // TASKLY_MAX_CONCURRENCY
@@ -159,12 +194,16 @@ export class ConfigLoader {
 
     // TASKLY_COLORS
     if (env.TASKLY_COLORS) {
-      options.colors = env.TASKLY_COLORS.split(',').map(c => c.trim()).filter(Boolean);
+      options.colors = env.TASKLY_COLORS.split(',')
+        .map(c => c.trim())
+        .filter(Boolean);
     }
 
     // TASKLY_NAMES
     if (env.TASKLY_NAMES) {
-      options.names = env.TASKLY_NAMES.split(',').map(n => n.trim()).filter(Boolean);
+      options.names = env.TASKLY_NAMES.split(',')
+        .map(n => n.trim())
+        .filter(Boolean);
     }
 
     return options;
@@ -190,14 +229,15 @@ export class ConfigLoader {
     const taskEntries = Object.entries(config.tasks);
 
     // If specific task names are provided, filter to those
-    const filteredEntries = taskNames && taskNames.length > 0
-      ? taskEntries.filter(([name]) => taskNames.includes(name))
-      : taskEntries;
+    const filteredEntries =
+      taskNames && taskNames.length > 0
+        ? taskEntries.filter(([name]) => taskNames.includes(name))
+        : taskEntries;
 
     for (const [name, taskConfig] of filteredEntries) {
       tasks.push({
         ...taskConfig,
-        identifier: taskConfig.identifier || name
+        identifier: taskConfig.identifier ?? name,
       });
     }
 
@@ -209,7 +249,7 @@ export class ConfigLoader {
    */
   private resolveConfigPath(configPath: string, cwd: string): string {
     const resolved = resolve(cwd, configPath);
-    
+
     if (!existsSync(resolved)) {
       throw new TasklyError(
         `Configuration file not found: ${resolved}`,
@@ -250,15 +290,15 @@ export class ConfigLoader {
     switch (ext) {
       case '.json':
         return this.parseJSONConfig(configPath);
-      
+
       case '.yaml':
       case '.yml':
         return this.parseYAMLConfig(configPath);
-      
+
       case '.js':
       case '.mjs':
         return await this.parseJSConfig(configPath);
-      
+
       default:
         throw new TasklyError(
           `Unsupported configuration file extension: ${ext}`,
@@ -313,16 +353,21 @@ export class ConfigLoader {
    * Simple YAML parser for basic configuration (no dependencies)
    * Supports basic key-value pairs, arrays, and nested objects
    */
-  private parseSimpleYAML(content: string): any {
+  private parseSimpleYAML(content: string): Record<string, unknown> {
     const lines = content.split('\n').map(line => line.replace(/\r$/, ''));
-    const result: any = {};
-    const stack: Array<{ obj: any; indent: number; isArray?: boolean }> = [{ obj: result, indent: -1 }];
+    const result: Record<string, unknown> = {};
+    const stack: Array<{
+      obj: Record<string, unknown> | unknown[];
+      indent: number;
+      isArray?: boolean;
+    }> = [{ obj: result, indent: -1 }];
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const trimmed = line.trim();
 
       // Skip empty lines and comments
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
       if (!trimmed || trimmed.startsWith('#')) {
         continue;
       }
@@ -346,41 +391,44 @@ export class ConfigLoader {
           // Object key - check if next line is an array
           const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
           const nextTrimmed = nextLine.trim();
-          
+
           if (nextTrimmed.startsWith('- ')) {
             // This is an array
-            const newArray: any[] = [];
-            parent.obj[key] = newArray;
+            const newArray: unknown[] = [];
+            (parent.obj as Record<string, unknown>)[key] = newArray;
             stack.push({ obj: newArray, indent, isArray: true });
           } else {
             // This is an object
-            const newObj = {};
-            parent.obj[key] = newObj;
+            const newObj: Record<string, unknown> = {};
+            (parent.obj as Record<string, unknown>)[key] = newObj;
             stack.push({ obj: newObj, indent });
           }
         } else {
           // Value key
-          parent.obj[key] = this.parseYAMLValue(valueStr);
+          (parent.obj as Record<string, unknown>)[key] =
+            this.parseYAMLValue(valueStr);
         }
       } else if (trimmed.startsWith('- ')) {
         // Array item
         const value = trimmed.substring(2).trim();
-        
+
         if (!parent.isArray && !Array.isArray(parent.obj)) {
-          throw new Error(`Invalid YAML: array item without array context at line ${i + 1}`);
+          throw new Error(
+            `Invalid YAML: array item without array context at line ${i + 1}`
+          );
         }
-        
+
         if (value.includes(':')) {
           // Object in array
-          const obj = {};
+          const obj: Record<string, unknown> = {};
           const colonIndex = value.indexOf(':');
           const key = value.substring(0, colonIndex).trim();
           const valueStr = value.substring(colonIndex + 1).trim();
-          (obj as any)[key] = this.parseYAMLValue(valueStr);
-          parent.obj.push(obj);
+          obj[key] = this.parseYAMLValue(valueStr);
+          (parent.obj as unknown[]).push(obj);
         } else {
           // Simple value in array
-          parent.obj.push(this.parseYAMLValue(value));
+          (parent.obj as unknown[]).push(this.parseYAMLValue(value));
         }
       }
     }
@@ -391,16 +439,22 @@ export class ConfigLoader {
   /**
    * Parse YAML value (string, number, boolean, array)
    */
-  private parseYAMLValue(value: string): any {
+  private parseYAMLValue(value: string): unknown {
     // Handle quoted strings
-    if ((value.startsWith('"') && value.endsWith('"')) || 
-        (value.startsWith("'") && value.endsWith("'"))) {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Boolean logic for quote checking
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
       return value.slice(1, -1);
     }
 
     // Handle arrays
     if (value.startsWith('[') && value.endsWith(']')) {
-      const items = value.slice(1, -1).split(',').map(item => item.trim());
+      const items = value
+        .slice(1, -1)
+        .split(',')
+        .map(item => item.trim());
       return items.map(item => this.parseYAMLValue(item));
     }
 
@@ -426,7 +480,7 @@ export class ConfigLoader {
     try {
       // Use dynamic import to load the config file
       const configModule = await import(`file://${configPath}`);
-      const config = configModule.default || configModule;
+      const config = configModule.default ?? configModule;
       return this.validateConfig(config, configPath);
     } catch (error) {
       throw new TasklyError(
@@ -441,7 +495,8 @@ export class ConfigLoader {
   /**
    * Validate configuration object
    */
-  private validateConfig(config: any, configPath: string): TasklyConfig {
+  private validateConfig(config: unknown, configPath: string): TasklyConfig {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
     if (!config || typeof config !== 'object') {
       throw new TasklyError(
         `Configuration must be an object: ${configPath}`,
@@ -450,45 +505,57 @@ export class ConfigLoader {
     }
 
     // Validate package manager if specified
-    if (config.packageManager) {
+    if ((config as Record<string, unknown>).packageManager) {
       const validPMs = ['npm', 'yarn', 'pnpm', 'bun'];
-      if (!validPMs.includes(config.packageManager)) {
+      const packageManager = (config as Record<string, unknown>)
+        .packageManager as string;
+      if (!validPMs.includes(packageManager)) {
         throw new TasklyError(
-          `Invalid package manager in config: ${config.packageManager}. Valid options: ${validPMs.join(', ')}`,
+          `Invalid package manager in config: ${packageManager}. Valid options: ${validPMs.join(', ')}`,
           ERROR_CODES.CONFIG_ERROR
         );
       }
     }
 
     // Validate maxConcurrency if specified
-    if (config.maxConcurrency !== undefined) {
-      if (typeof config.maxConcurrency !== 'number' || config.maxConcurrency <= 0) {
+    const maxConcurrency = (config as Record<string, unknown>).maxConcurrency;
+    if (maxConcurrency !== undefined) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Boolean logic for validation
+      if (typeof maxConcurrency !== 'number' || maxConcurrency <= 0) {
         throw new TasklyError(
-          `maxConcurrency must be a positive number: ${config.maxConcurrency}`,
+          `maxConcurrency must be a positive number: ${maxConcurrency}`,
           ERROR_CODES.CONFIG_ERROR
         );
       }
     }
 
     // Validate killOthersOnFail if specified
-    if (config.killOthersOnFail !== undefined && typeof config.killOthersOnFail !== 'boolean') {
+    const killOthersOnFail = (config as Record<string, unknown>)
+      .killOthersOnFail;
+    if (
+      killOthersOnFail !== undefined &&
+      typeof killOthersOnFail !== 'boolean'
+    ) {
       throw new TasklyError(
-        `killOthersOnFail must be a boolean: ${config.killOthersOnFail}`,
+        `killOthersOnFail must be a boolean: ${killOthersOnFail}`,
         ERROR_CODES.CONFIG_ERROR
       );
     }
 
     // Validate colors if specified
-    if (config.colors && !Array.isArray(config.colors)) {
+    const colors = (config as Record<string, unknown>).colors;
+    if (colors && !Array.isArray(colors)) {
       throw new TasklyError(
-        `colors must be an array: ${config.colors}`,
+        `colors must be an array: ${colors}`,
         ERROR_CODES.CONFIG_ERROR
       );
     }
 
     // Validate tasks if specified
-    if (config.tasks) {
-      if (typeof config.tasks !== 'object' || Array.isArray(config.tasks)) {
+    const tasks = (config as Record<string, unknown>).tasks;
+    if (tasks) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Boolean logic for validation
+      if (typeof tasks !== 'object' || Array.isArray(tasks)) {
         throw new TasklyError(
           `tasks must be an object with task definitions`,
           ERROR_CODES.CONFIG_ERROR
@@ -496,8 +563,12 @@ export class ConfigLoader {
       }
 
       // Validate each task
-      for (const [taskName, taskConfig] of Object.entries(config.tasks)) {
-        this.validateTaskConfig(taskName, taskConfig as any, configPath);
+      for (const [taskName, taskConfig] of Object.entries(tasks)) {
+        this.validateTaskConfig(
+          taskName,
+          taskConfig as Record<string, unknown>,
+          configPath
+        );
       }
     }
 
@@ -507,7 +578,12 @@ export class ConfigLoader {
   /**
    * Validate individual task configuration
    */
-  private validateTaskConfig(taskName: string, taskConfig: any, configPath: string): void {
+  private validateTaskConfig(
+    taskName: string,
+    taskConfig: Record<string, unknown>,
+    configPath: string
+  ): void {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
     if (!taskConfig || typeof taskConfig !== 'object') {
       throw new TasklyError(
         `Task "${taskName}" must be an object: ${configPath}`,
@@ -515,6 +591,7 @@ export class ConfigLoader {
       );
     }
 
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
     if (!taskConfig.command || typeof taskConfig.command !== 'string') {
       throw new TasklyError(
         `Task "${taskName}" must have a command string: ${configPath}`,
@@ -524,7 +601,7 @@ export class ConfigLoader {
 
     if (taskConfig.packageManager) {
       const validPMs = ['npm', 'yarn', 'pnpm', 'bun'];
-      if (!validPMs.includes(taskConfig.packageManager)) {
+      if (!validPMs.includes(taskConfig.packageManager as string)) {
         throw new TasklyError(
           `Invalid package manager for task "${taskName}": ${taskConfig.packageManager}`,
           ERROR_CODES.CONFIG_ERROR
@@ -545,7 +622,7 @@ export class ConfigLoader {
    */
   loadPackageJsonConfig(cwd: string = process.cwd()): TasklyConfig | null {
     const packageJsonPath = resolve(cwd, 'package.json');
-    
+
     if (!existsSync(packageJsonPath)) {
       return null;
     }
@@ -553,11 +630,11 @@ export class ConfigLoader {
     try {
       const content = readFileSync(packageJsonPath, 'utf-8');
       const packageJson = JSON.parse(content);
-      
+
       if (packageJson.taskly) {
         return this.validateConfig(packageJson.taskly, packageJsonPath);
       }
-      
+
       return null;
     } catch (error) {
       // Silently ignore package.json parsing errors for taskly config
@@ -582,28 +659,28 @@ export class ConfigLoader {
         dev: {
           command: 'npm run dev',
           identifier: 'development',
-          color: 'blue'
+          color: 'blue',
         },
         test: {
           command: 'npm run test:watch',
           identifier: 'testing',
-          color: 'green'
+          color: 'green',
         },
         lint: {
           command: 'npm run lint:watch',
           identifier: 'linting',
-          color: 'yellow'
+          color: 'yellow',
         },
         build: {
           command: 'npm run build',
           identifier: 'building',
           color: 'magenta',
-          packageManager: 'yarn'
-        }
+          packageManager: 'yarn',
+        },
       },
       options: {
-        verbose: false
-      }
+        verbose: false,
+      },
     };
 
     return {
@@ -613,18 +690,22 @@ export class ConfigLoader {
 export default ${JSON.stringify(exampleConfig, null, 2)};
 
 // Or using CommonJS:
-// module.exports = ${JSON.stringify(exampleConfig, null, 2)};`
+// module.exports = ${JSON.stringify(exampleConfig, null, 2)};`,
     };
   }
 
   /**
    * Convert object to simple YAML format
    */
-  private objectToYAML(obj: any, indent: number = 0): string {
+  private objectToYAML(
+    obj: Record<string, unknown>,
+    indent: number = 0
+  ): string {
     const spaces = '  '.repeat(indent);
     let yaml = '';
 
     for (const [key, value] of Object.entries(obj)) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Explicit null/undefined check
       if (value === null || value === undefined) {
         yaml += `${spaces}${key}: null\n`;
       } else if (typeof value === 'boolean') {
@@ -644,7 +725,7 @@ export default ${JSON.stringify(exampleConfig, null, 2)};
         }
       } else if (typeof value === 'object') {
         yaml += `${spaces}${key}:\n`;
-        yaml += this.objectToYAML(value, indent + 1);
+        yaml += this.objectToYAML(value as Record<string, unknown>, indent + 1);
       }
     }
 
@@ -655,7 +736,10 @@ export default ${JSON.stringify(exampleConfig, null, 2)};
 /**
  * Load configuration with default loader
  */
-export async function loadConfig(configPath?: string, cwd?: string): Promise<TasklyConfig | null> {
+export async function loadConfig(
+  configPath?: string,
+  cwd?: string
+): Promise<TasklyConfig | null> {
   const loader = new ConfigLoader();
   return loader.loadConfig(configPath, cwd);
 }
@@ -663,7 +747,10 @@ export async function loadConfig(configPath?: string, cwd?: string): Promise<Tas
 /**
  * Merge configuration with CLI options
  */
-export function mergeConfig(config: TasklyConfig | null, cliOptions: CLIOptions): CLIOptions {
+export function mergeConfig(
+  config: TasklyConfig | null,
+  cliOptions: CLIOptions
+): CLIOptions {
   const loader = new ConfigLoader();
   return loader.mergeWithCLIOptions(config, cliOptions);
 }

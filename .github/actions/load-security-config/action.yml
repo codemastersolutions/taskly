@@ -1,0 +1,131 @@
+name: 'Load Security Configuration'
+description: 'Load security configuration from .github/security-config.yml and export for use in workflows'
+author: 'Auto-Publish System'
+
+inputs:
+  config-path:
+    description: 'Path to security configuration file'
+    required: false
+    default: '.github/security-config.yml'
+  validate-config:
+    description: 'Validate configuration before loading'
+    required: false
+    default: 'true'
+
+outputs:
+  critical-threshold:
+    description: 'Maximum allowed critical vulnerabilities'
+    value: ${{ steps.load.outputs.critical-threshold }}
+  high-threshold:
+    description: 'Maximum allowed high vulnerabilities'
+    value: ${{ steps.load.outputs.high-threshold }}
+  moderate-threshold:
+    description: 'Maximum allowed moderate vulnerabilities'
+    value: ${{ steps.load.outputs.moderate-threshold }}
+  audit-level:
+    description: 'NPM audit level to use'
+    value: ${{ steps.load.outputs.audit-level }}
+  fail-on-vulnerabilities:
+    description: 'Whether to fail on vulnerability threshold exceeded'
+    value: ${{ steps.load.outputs.fail-on-vulnerabilities }}
+  check-licenses:
+    description: 'Whether to check license compatibility'
+    value: ${{ steps.load.outputs.check-licenses }}
+  allowed-licenses:
+    description: 'Comma-separated list of allowed licenses'
+    value: ${{ steps.load.outputs.allowed-licenses }}
+  check-secrets:
+    description: 'Whether to scan for hardcoded secrets'
+    value: ${{ steps.load.outputs.check-secrets }}
+  secrets-patterns:
+    description: 'JSON array of custom secret patterns'
+    value: ${{ steps.load.outputs.secrets-patterns }}
+  check-outdated:
+    description: 'Whether to check for outdated dependencies'
+    value: ${{ steps.load.outputs.check-outdated }}
+  config-valid:
+    description: 'Whether the configuration is valid'
+    value: ${{ steps.validate.outputs.valid }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+
+    - name: Validate security configuration
+      id: validate
+      if: inputs.validate-config == 'true'
+      shell: bash
+      run: |
+        echo "🔍 Validating security configuration..."
+
+        if [ -f "${{ inputs.config-path }}" ]; then
+          echo "Configuration file found: ${{ inputs.config-path }}"
+          
+          if node ${{ github.workspace }}/.github/scripts/security-config-loader.js validate "${{ inputs.config-path }}"; then
+            echo "valid=true" >> $GITHUB_OUTPUT
+            echo "✅ Security configuration is valid"
+          else
+            echo "valid=false" >> $GITHUB_OUTPUT
+            echo "❌ Security configuration validation failed"
+            exit 1
+          fi
+        else
+          echo "⚠️ Configuration file not found, will use defaults"
+          echo "valid=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Load security configuration
+      id: load
+      shell: bash
+      run: |
+        echo "📋 Loading security configuration..."
+
+        # Load and export configuration
+        node ${{ github.workspace }}/.github/scripts/security-config-loader.js export "${{ inputs.config-path }}"
+
+        echo "✅ Security configuration loaded and exported"
+
+    - name: Display configuration summary
+      shell: bash
+      run: |
+        echo "## 🔧 Security Configuration" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Configuration loaded from: \`${{ inputs.config-path }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        echo "### 🛡️ Vulnerability Thresholds" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Severity | Threshold | Action |" >> $GITHUB_STEP_SUMMARY
+        echo "|----------|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Critical | ${{ steps.load.outputs.critical-threshold }} | ${{ steps.load.outputs.fail-on-vulnerabilities == 'true' && 'Fail' || 'Warn' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| High | ${{ steps.load.outputs.high-threshold }} | ${{ steps.load.outputs.fail-on-vulnerabilities == 'true' && 'Fail' || 'Warn' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Moderate | ${{ steps.load.outputs.moderate-threshold }} | ${{ steps.load.outputs.fail-on-vulnerabilities == 'true' && 'Fail' || 'Warn' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        echo "### 📄 License Policy" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ steps.load.outputs.check-licenses }}" = "true" ]; then
+          echo "✅ **License checking enabled**" >> $GITHUB_STEP_SUMMARY
+          echo "Allowed licenses: \`${{ steps.load.outputs.allowed-licenses }}\`" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⏭️ **License checking disabled**" >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        echo "### 🔐 Security Scanning" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ steps.load.outputs.check-secrets }}" = "true" ]; then
+          echo "✅ **Hardcoded secrets scanning enabled**" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⏭️ **Hardcoded secrets scanning disabled**" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        if [ "${{ steps.load.outputs.check-outdated }}" = "true" ]; then
+          echo "✅ **Outdated dependencies checking enabled**" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⏭️ **Outdated dependencies checking disabled**" >> $GITHUB_STEP_SUMMARY
+        fi

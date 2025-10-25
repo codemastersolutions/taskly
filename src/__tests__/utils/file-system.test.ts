@@ -1,19 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'fs';
 import { join } from 'path';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  fileExists,
-  directoryExists,
-  validateWorkingDirectory,
   detectPackageManagerFromLockFiles,
   detectPackageManagerFromPackageJson,
-  detectPackageManager,
+  directoryExists,
+  fileExists,
   findConfigFile,
   loadJsonConfig,
-  loadConfig,
   resolveWorkingDirectory,
   safeReadFile,
-  safeWriteFile
+  safeWriteFile,
+  validateWorkingDirectory,
 } from '../../utils/file-system.js';
 
 // Mock fs module
@@ -23,8 +21,8 @@ vi.mock('fs', () => ({
     stat: vi.fn(),
     readFile: vi.fn(),
     writeFile: vi.fn(),
-    mkdir: vi.fn()
-  }
+    mkdir: vi.fn(),
+  },
 }));
 
 const mockFs = vi.mocked(fs);
@@ -51,7 +49,7 @@ describe('File System Utils', () => {
   describe('directoryExists', () => {
     it('should return true if directory exists', async () => {
       mockFs.stat.mockResolvedValue({
-        isDirectory: () => true
+        isDirectory: () => true,
       } as any);
       const result = await directoryExists('test-dir');
       expect(result).toBe(true);
@@ -59,7 +57,7 @@ describe('File System Utils', () => {
 
     it('should return false if path is not a directory', async () => {
       mockFs.stat.mockResolvedValue({
-        isDirectory: () => false
+        isDirectory: () => false,
       } as any);
       const result = await directoryExists('test-file');
       expect(result).toBe(false);
@@ -75,7 +73,7 @@ describe('File System Utils', () => {
   describe('validateWorkingDirectory', () => {
     it('should validate existing readable directory', async () => {
       mockFs.stat.mockResolvedValue({
-        isDirectory: () => true
+        isDirectory: () => true,
       } as any);
       mockFs.access
         .mockResolvedValueOnce(undefined) // First call (directory exists)
@@ -88,7 +86,7 @@ describe('File System Utils', () => {
 
     it('should reject non-existent directory', async () => {
       mockFs.stat.mockResolvedValue({
-        isDirectory: () => false
+        isDirectory: () => false,
       } as any);
 
       const result = await validateWorkingDirectory('./nonexistent');
@@ -98,7 +96,7 @@ describe('File System Utils', () => {
 
     it('should warn about non-writable directory', async () => {
       mockFs.stat.mockResolvedValue({
-        isDirectory: () => true
+        isDirectory: () => true,
       } as any);
       mockFs.access
         .mockResolvedValueOnce(undefined) // First call (directory exists)
@@ -107,14 +105,15 @@ describe('File System Utils', () => {
 
       const result = await validateWorkingDirectory('./readonly');
       expect(result.valid).toBe(true);
-      expect(result.warnings).toContain('Directory is not writable: ' + join(process.cwd(), 'readonly'));
+      expect(result.warnings).toContain(
+        'Directory is not writable: ' + join(process.cwd(), 'readonly')
+      );
     });
   });
 
   describe('detectPackageManagerFromLockFiles', () => {
     it('should detect yarn from yarn.lock', async () => {
-      mockFs.access
-        .mockResolvedValueOnce(undefined); // yarn.lock found first
+      mockFs.access.mockResolvedValueOnce(undefined); // yarn.lock found first
 
       const result = await detectPackageManagerFromLockFiles('./test');
       expect(result).toBe('yarn');
@@ -140,9 +139,11 @@ describe('File System Utils', () => {
   describe('detectPackageManagerFromPackageJson', () => {
     it('should detect package manager from packageManager field', async () => {
       mockFs.access.mockResolvedValue(undefined);
-      mockFs.readFile.mockResolvedValue(JSON.stringify({
-        packageManager: 'yarn@3.0.0'
-      }));
+      mockFs.readFile.mockResolvedValue(
+        JSON.stringify({
+          packageManager: 'yarn@3.0.0',
+        })
+      );
 
       const result = await detectPackageManagerFromPackageJson('./test');
       expect(result).toBe('yarn');
@@ -157,9 +158,11 @@ describe('File System Utils', () => {
 
     it('should return null if packageManager field not found', async () => {
       mockFs.access.mockResolvedValue(undefined);
-      mockFs.readFile.mockResolvedValue(JSON.stringify({
-        name: 'test-package'
-      }));
+      mockFs.readFile.mockResolvedValue(
+        JSON.stringify({
+          name: 'test-package',
+        })
+      );
 
       const result = await detectPackageManagerFromPackageJson('./test');
       expect(result).toBe(null);

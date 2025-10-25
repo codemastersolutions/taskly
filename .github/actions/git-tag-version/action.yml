@@ -1,0 +1,270 @@
+name: 'Git Tag Version'
+description: 'Create git commit and tag for new version'
+author: 'Taskly Team'
+
+inputs:
+  version:
+    description: 'Version to tag (without v prefix)'
+    required: true
+  increment-type:
+    description: 'Type of version increment (major/minor/patch)'
+    required: true
+  reason:
+    description: 'Reason for version increment'
+    required: true
+  breaking-changes:
+    description: 'Whether breaking changes were detected'
+    required: false
+    default: 'false'
+  features:
+    description: 'Whether new features were detected'
+    required: false
+    default: 'false'
+  fixes:
+    description: 'Whether bug fixes were detected'
+    required: false
+    default: 'false'
+  commit-sha:
+    description: 'SHA of the commit that triggered the increment'
+    required: false
+  dry-run:
+    description: 'Run without actually creating commit and tag'
+    required: false
+    default: 'false'
+  git-user-name:
+    description: 'Git user name for commits'
+    required: false
+    default: 'GitHub Action'
+  git-user-email:
+    description: 'Git user email for commits'
+    required: false
+    default: 'action@github.com'
+
+outputs:
+  tag-name:
+    description: 'Created tag name (with v prefix)'
+    value: ${{ steps.create-tag.outputs.tag-name }}
+  commit-sha:
+    description: 'SHA of the version commit'
+    value: ${{ steps.create-tag.outputs.commit-sha }}
+  tag-created:
+    description: 'Whether tag was actually created'
+    value: ${{ steps.create-tag.outputs.tag-created }}
+  commit-created:
+    description: 'Whether commit was actually created'
+    value: ${{ steps.create-tag.outputs.commit-created }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Configure Git
+      shell: bash
+      run: |
+        git config --local user.email "${{ inputs.git-user-email }}"
+        git config --local user.name "${{ inputs.git-user-name }}"
+        echo "✅ Git configured with user: ${{ inputs.git-user-name }} <${{ inputs.git-user-email }}>"
+
+    - name: Check for changes to commit
+      id: check-changes
+      shell: bash
+      run: |
+        # Check if there are any changes to commit
+        if git diff --quiet HEAD; then
+          echo "has-changes=false" >> $GITHUB_OUTPUT
+          echo "ℹ️ No changes detected in working directory"
+        else
+          echo "has-changes=true" >> $GITHUB_OUTPUT
+          echo "📝 Changes detected in working directory"
+          
+          # Show what files have changed
+          echo "Changed files:"
+          git diff --name-only HEAD
+        fi
+
+    - name: Create version commit and tag
+      id: create-tag
+      shell: bash
+      run: |
+        VERSION="${{ inputs.version }}"
+        TAG_NAME="v$VERSION"
+        DRY_RUN="${{ inputs.dry-run }}"
+        HAS_CHANGES="${{ steps.check-changes.outputs.has-changes }}"
+
+        echo "🏷️ Preparing to create tag: $TAG_NAME"
+        echo "📦 Version: $VERSION"
+        echo "🔄 Increment type: ${{ inputs.increment-type }}"
+        echo "💡 Reason: ${{ inputs.reason }}"
+
+        # Initialize outputs
+        echo "tag-name=$TAG_NAME" >> $GITHUB_OUTPUT
+        echo "tag-created=false" >> $GITHUB_OUTPUT
+        echo "commit-created=false" >> $GITHUB_OUTPUT
+
+        # Check if tag already exists
+        if git tag -l "$TAG_NAME" | grep -q "$TAG_NAME"; then
+          echo "⚠️ Tag $TAG_NAME already exists, skipping creation"
+          echo "tag-created=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # Create commit if there are changes and not in dry-run mode
+        if [ "$HAS_CHANGES" = "true" ] && [ "$DRY_RUN" != "true" ]; then
+          echo "📝 Creating version commit..."
+          
+          # Create detailed commit message
+          COMMIT_MESSAGE="chore: bump version to $VERSION
+
+          Version Details:
+          - Increment type: ${{ inputs.increment-type }}
+          - Reason: ${{ inputs.reason }}
+          - Breaking changes: ${{ inputs.breaking-changes }}
+          - New features: ${{ inputs.features }}
+          - Bug fixes: ${{ inputs.fixes }}"
+          
+          if [ -n "${{ inputs.commit-sha }}" ]; then
+            COMMIT_MESSAGE="$COMMIT_MESSAGE
+          - Triggered by: ${{ inputs.commit-sha }}"
+          fi
+          
+          # Add changed files (typically package.json, package-lock.json, CHANGELOG.md)
+          git add package.json package-lock.json CHANGELOG.md 2>/dev/null || true
+          
+          # Create the commit
+          git commit -m "$COMMIT_MESSAGE"
+          COMMIT_SHA=$(git rev-parse HEAD)
+          
+          echo "commit-sha=$COMMIT_SHA" >> $GITHUB_OUTPUT
+          echo "commit-created=true" >> $GITHUB_OUTPUT
+          echo "✅ Version commit created: $COMMIT_SHA"
+          
+        elif [ "$HAS_CHANGES" = "true" ] && [ "$DRY_RUN" = "true" ]; then
+          echo "🔍 Dry-run: Would create commit for version $VERSION"
+          echo "commit-created=false" >> $GITHUB_OUTPUT
+          
+        else
+          echo "ℹ️ No changes to commit"
+          COMMIT_SHA=$(git rev-parse HEAD)
+          echo "commit-sha=$COMMIT_SHA" >> $GITHUB_OUTPUT
+          echo "commit-created=false" >> $GITHUB_OUTPUT
+        fi
+
+        # Create tag if not in dry-run mode
+        if [ "$DRY_RUN" != "true" ]; then
+          echo "🏷️ Creating git tag: $TAG_NAME"
+          
+          # Create annotated tag with detailed message
+          TAG_MESSAGE="Release $VERSION
+
+          This release includes:
+          - Increment type: ${{ inputs.increment-type }}
+          - Reason: ${{ inputs.reason }}"
+          
+          if [ "${{ inputs.breaking-changes }}" = "true" ]; then
+            TAG_MESSAGE="$TAG_MESSAGE
+          - ⚠️ Contains breaking changes"
+          fi
+          
+          if [ "${{ inputs.features }}" = "true" ]; then
+            TAG_MESSAGE="$TAG_MESSAGE
+          - ✨ Contains new features"
+          fi
+          
+          if [ "${{ inputs.fixes }}" = "true" ]; then
+            TAG_MESSAGE="$TAG_MESSAGE
+          - 🐛 Contains bug fixes"
+          fi
+          
+          git tag -a "$TAG_NAME" -m "$TAG_MESSAGE"
+          echo "tag-created=true" >> $GITHUB_OUTPUT
+          echo "✅ Git tag created: $TAG_NAME"
+          
+        else
+          echo "🔍 Dry-run: Would create tag $TAG_NAME"
+          echo "tag-created=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Push commit and tag
+      shell: bash
+      if: inputs.dry-run != 'true'
+      run: |
+        TAG_NAME="${{ steps.create-tag.outputs.tag-name }}"
+        COMMIT_CREATED="${{ steps.create-tag.outputs.commit-created }}"
+        TAG_CREATED="${{ steps.create-tag.outputs.tag-created }}"
+
+        echo "🚀 Pushing changes to repository..."
+
+        # Push commit if one was created
+        if [ "$COMMIT_CREATED" = "true" ]; then
+          echo "📤 Pushing version commit..."
+          git push origin main
+          echo "✅ Version commit pushed"
+        fi
+
+        # Push tag if one was created
+        if [ "$TAG_CREATED" = "true" ]; then
+          echo "📤 Pushing tag: $TAG_NAME"
+          git push origin "$TAG_NAME"
+          echo "✅ Tag pushed: $TAG_NAME"
+        fi
+
+        if [ "$COMMIT_CREATED" = "false" ] && [ "$TAG_CREATED" = "false" ]; then
+          echo "ℹ️ Nothing to push"
+        fi
+
+    - name: Verify tag creation
+      shell: bash
+      if: inputs.dry-run != 'true' && steps.create-tag.outputs.tag-created == 'true'
+      run: |
+        TAG_NAME="${{ steps.create-tag.outputs.tag-name }}"
+
+        echo "🔍 Verifying tag creation..."
+
+        # Verify tag exists locally
+        if git tag -l "$TAG_NAME" | grep -q "$TAG_NAME"; then
+          echo "✅ Tag exists locally: $TAG_NAME"
+        else
+          echo "❌ Tag not found locally: $TAG_NAME"
+          exit 1
+        fi
+
+        # Verify tag exists on remote (with retry)
+        for i in {1..3}; do
+          echo "🔄 Checking remote tag (attempt $i/3)..."
+          if git ls-remote --tags origin | grep -q "refs/tags/$TAG_NAME"; then
+            echo "✅ Tag verified on remote: $TAG_NAME"
+            break
+          elif [ $i -eq 3 ]; then
+            echo "⚠️ Tag not yet visible on remote, but this may be due to propagation delay"
+          else
+            echo "⏳ Waiting for tag to propagate..."
+            sleep 2
+          fi
+        done
+
+    - name: Generate tagging summary
+      shell: bash
+      run: |
+        echo "## 🏷️ Git Tagging Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Version | \`${{ inputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Tag Name | \`${{ steps.create-tag.outputs.tag-name }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Increment Type | \`${{ inputs.increment-type }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Reason | ${{ inputs.reason }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Commit Created | ${{ steps.create-tag.outputs.commit-created }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Tag Created | ${{ steps.create-tag.outputs.tag-created }} |" >> $GITHUB_STEP_SUMMARY
+
+        if [ -n "${{ steps.create-tag.outputs.commit-sha }}" ]; then
+          echo "| Commit SHA | \`${{ steps.create-tag.outputs.commit-sha }}\` |" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        if [ "${{ inputs.dry-run }}" = "true" ]; then
+          echo "🔍 **Note:** This was a dry-run. No actual commit or tag was created." >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ steps.create-tag.outputs.tag-created }}" = "true" ]; then
+          echo "✅ **Success:** Version commit and tag created successfully!" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "ℹ️ **Result:** No new tag was needed (may already exist or no changes detected)." >> $GITHUB_STEP_SUMMARY
+        fi

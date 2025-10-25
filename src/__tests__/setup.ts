@@ -40,7 +40,7 @@ afterAll(() => {
 beforeEach(() => {
   // Clear all mocks before each test
   vi.clearAllMocks();
-  
+
   // Reset modules to ensure clean state
   vi.resetModules();
 });
@@ -63,16 +63,16 @@ declare global {
 // Export test utilities
 export const testUtils = {
   // Utility to wait for a specific amount of time
-  wait: (ms: number): Promise<void> => 
+  wait: (ms: number): Promise<void> =>
     new Promise(resolve => setTimeout(resolve, ms)),
-  
+
   // Utility to create a mock function with specific behavior
   createMockFn: <T extends (...args: any[]) => any>(
     implementation?: T
   ): ReturnType<typeof vi.fn> => {
     return implementation ? vi.fn(implementation) : vi.fn();
   },
-  
+
   // Utility to suppress console output for a specific test
   suppressConsole: (callback: () => void | Promise<void>) => {
     const originalMethods = {
@@ -81,13 +81,13 @@ export const testUtils = {
       error: console.error,
       info: console.info,
     };
-    
+
     // Suppress all console methods
     console.log = () => {};
     console.warn = () => {};
     console.error = () => {};
     console.info = () => {};
-    
+
     try {
       return callback();
     } finally {
@@ -95,7 +95,7 @@ export const testUtils = {
       Object.assign(console, originalMethods);
     }
   },
-  
+
   // Utility to create temporary test data
   createTempData: (data: Record<string, any>) => ({
     ...data,

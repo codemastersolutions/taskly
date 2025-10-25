@@ -1,15 +1,15 @@
 /**
  * Taskly - Zero-dependency TypeScript library for parallel command execution
- * 
+ *
  * @example
  * ```typescript
  * import { TaskRunner, TaskConfig } from 'taskly';
- * 
+ *
  * const tasks: TaskConfig[] = [
  *   { command: 'npm run build', identifier: 'build' },
  *   { command: 'npm run test', identifier: 'test' }
  * ];
- * 
+ *
  * const runner = new TaskRunner({ tasks });
  * const results = await runner.execute(tasks);
  * ```
@@ -23,7 +23,7 @@ initializeGlobalErrorHandling({
   enableConsoleLogging: true,
   enableFileLogging: false,
   exitOnCriticalError: false, // Let applications handle critical errors
-  enableRecovery: true
+  enableRecovery: true,
 });
 
 // Export all types
@@ -36,7 +36,7 @@ export {
   handleGlobalError,
   addGlobalShutdownCallback,
   gracefulShutdown,
-  LogLevel
+  LogLevel,
 } from './errors/global-handler.js';
 
 // Export core classes
@@ -46,29 +46,29 @@ export { ColorManager } from './core/color-manager.js';
 export { PackageManagerDetector } from './core/package-manager.js';
 
 // Export utilities (specific exports to avoid conflicts)
-export { 
+export {
   validateCommand,
   validatePackageManager,
   validateColor,
   validateTaskConfig,
   validateTasklyOptions,
   sanitizeCommand,
-  createValidationError
+  createValidationError,
 } from './utils/validation.js';
 
-export { 
+export {
   detectPackageManager,
   loadConfigFile,
   fileExists,
-  directoryExists
+  directoryExists,
 } from './utils/file-system.js';
 
-export { 
+export {
   formatOutputLine,
   stripAnsi,
   getTerminalWidth,
   clearLine,
-  cursorUp
+  cursorUp,
 } from './utils/terminal.js';
 
 // Re-export commonly used types for convenience
@@ -77,7 +77,7 @@ export type {
   TaskResult,
   TasklyOptions,
   PackageManager,
-  Color
+  Color,
 } from './types/index.js';
 
 /**
@@ -87,15 +87,15 @@ export { TaskRunner as default } from './core/task-runner.js';
 
 /**
  * Convenience function to create and execute tasks
- * 
+ *
  * @param tasks Array of task configurations
  * @param options Optional execution options
  * @returns Promise resolving to task results
- * 
+ *
  * @example
  * ```typescript
  * import { runTasks } from 'taskly';
- * 
+ *
  * const results = await runTasks([
  *   { command: 'npm run build' },
  *   { command: 'npm run test' }
@@ -107,11 +107,11 @@ export async function runTasks(
   options?: Partial<import('./types/index.js').TasklyOptions>
 ): Promise<import('./types/index.js').TaskResult[]> {
   const { TaskRunner } = await import('./core/task-runner.js');
-  
+
   const runner = new TaskRunner({
     tasks,
-    ...options
+    ...options,
   });
-  
+
   return runner.execute(tasks);
 }

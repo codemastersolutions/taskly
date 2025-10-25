@@ -4,13 +4,13 @@
  */
 
 import { promises as fs } from 'fs';
-import { join, resolve, dirname, basename } from 'path';
-import { 
-  PackageManager, 
-  TasklyConfig, 
-  TasklyError, 
+import { basename, dirname, join, resolve } from 'path';
+import {
   ERROR_CODES,
-  ValidationResult 
+  PackageManager,
+  TasklyConfig,
+  TasklyError,
+  ValidationResult,
 } from '../types/index.js';
 
 // Package manager lock file mappings
@@ -18,7 +18,7 @@ const LOCK_FILE_MAPPINGS: Record<string, PackageManager> = {
   'package-lock.json': 'npm',
   'yarn.lock': 'yarn',
   'pnpm-lock.yaml': 'pnpm',
-  'bun.lockb': 'bun'
+  'bun.lockb': 'bun',
 };
 
 // Configuration file names to search for
@@ -27,7 +27,7 @@ const CONFIG_FILE_NAMES = [
   'taskly.config.js',
   '.tasklyrc.json',
   '.tasklyrc.js',
-  'taskly.json'
+  'taskly.json',
 ];
 
 /**
@@ -57,10 +57,13 @@ export async function directoryExists(dirPath: string): Promise<boolean> {
 /**
  * Validates that a working directory exists and is accessible
  */
-export async function validateWorkingDirectory(cwd: string): Promise<ValidationResult> {
+export async function validateWorkingDirectory(
+  cwd: string
+): Promise<ValidationResult> {
   const errors: string[] = [];
   const warnings: string[] = [];
 
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
   if (!cwd || typeof cwd !== 'string') {
     errors.push('Working directory must be a non-empty string');
     return { valid: false, errors, warnings };
@@ -85,28 +88,31 @@ export async function validateWorkingDirectory(cwd: string): Promise<ValidationR
     } catch {
       warnings.push(`Directory is not writable: ${resolvedPath}`);
     }
-
   } catch (error) {
-    errors.push(`Cannot access directory: ${resolvedPath} - ${error instanceof Error ? error.message : 'Unknown error'}`);
+    errors.push(
+      `Cannot access directory: ${resolvedPath} - ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
     return { valid: false, errors, warnings };
   }
 
   return {
     valid: errors.length === 0,
     errors,
-    warnings
+    warnings,
   };
 }
 
 /**
  * Detects package manager from lock files in a directory
  */
-export async function detectPackageManagerFromLockFiles(cwd: string = process.cwd()): Promise<PackageManager | null> {
+export async function detectPackageManagerFromLockFiles(
+  cwd: string = process.cwd()
+): Promise<PackageManager | null> {
   const resolvedCwd = resolve(cwd);
 
   // Check for lock files in order of preference
   const lockFiles = Object.keys(LOCK_FILE_MAPPINGS);
-  
+
   for (const lockFile of lockFiles) {
     const lockFilePath = join(resolvedCwd, lockFile);
     if (await fileExists(lockFilePath)) {
@@ -120,9 +126,11 @@ export async function detectPackageManagerFromLockFiles(cwd: string = process.cw
 /**
  * Detects package manager by checking package.json packageManager field
  */
-export async function detectPackageManagerFromPackageJson(cwd: string = process.cwd()): Promise<PackageManager | null> {
+export async function detectPackageManagerFromPackageJson(
+  cwd: string = process.cwd()
+): Promise<PackageManager | null> {
   const packageJsonPath = join(resolve(cwd), 'package.json');
-  
+
   try {
     if (!(await fileExists(packageJsonPath))) {
       return null;
@@ -149,11 +157,14 @@ export async function detectPackageManagerFromPackageJson(cwd: string = process.
 /**
  * Detects package manager using multiple strategies
  */
-export async function detectPackageManager(cwd: string = process.cwd()): Promise<PackageManager> {
+export async function detectPackageManager(
+  cwd: string = process.cwd()
+): Promise<PackageManager> {
   const resolvedCwd = resolve(cwd);
 
   // Strategy 1: Check package.json packageManager field
-  const pmFromPackageJson = await detectPackageManagerFromPackageJson(resolvedCwd);
+  const pmFromPackageJson =
+    await detectPackageManagerFromPackageJson(resolvedCwd);
   if (pmFromPackageJson) {
     return pmFromPackageJson;
   }
@@ -185,7 +196,9 @@ export async function detectPackageManager(cwd: string = process.cwd()): Promise
 /**
  * Searches for configuration files in a directory
  */
-export async function findConfigFile(cwd: string = process.cwd()): Promise<string | null> {
+export async function findConfigFile(
+  cwd: string = process.cwd()
+): Promise<string | null> {
   const resolvedCwd = resolve(cwd);
 
   for (const configFileName of CONFIG_FILE_NAMES) {
@@ -201,11 +214,14 @@ export async function findConfigFile(cwd: string = process.cwd()): Promise<strin
 /**
  * Loads and parses a JSON configuration file
  */
-export async function loadJsonConfig(configPath: string): Promise<TasklyConfig> {
+export async function loadJsonConfig(
+  configPath: string
+): Promise<TasklyConfig> {
   try {
     const configContent = await fs.readFile(configPath, 'utf-8');
     const config = JSON.parse(configContent);
-    
+
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
     if (!config || typeof config !== 'object') {
       throw new TasklyError(
         'Configuration file must contain a valid JSON object',
@@ -235,10 +251,11 @@ export async function loadJsConfig(configPath: string): Promise<TasklyConfig> {
     // Convert to file URL for dynamic import
     const fileUrl = `file://${resolve(configPath)}`;
     const configModule = await import(fileUrl);
-    
+
     // Handle both default export and named exports
-    const config = configModule.default || configModule;
-    
+    const config = configModule.default ?? configModule;
+
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Checking for falsy values
     if (!config || typeof config !== 'object') {
       throw new TasklyError(
         'Configuration file must export a valid configuration object',
@@ -263,9 +280,11 @@ export async function loadJsConfig(configPath: string): Promise<TasklyConfig> {
 /**
  * Loads configuration from a file (auto-detects format)
  */
-export async function loadConfigFile(configPath: string): Promise<TasklyConfig> {
+export async function loadConfigFile(
+  configPath: string
+): Promise<TasklyConfig> {
   const resolvedPath = resolve(configPath);
-  
+
   if (!(await fileExists(resolvedPath))) {
     throw new TasklyError(
       `Configuration file not found: ${resolvedPath}`,
@@ -274,7 +293,7 @@ export async function loadConfigFile(configPath: string): Promise<TasklyConfig> 
   }
 
   const ext = basename(resolvedPath).split('.').pop()?.toLowerCase();
-  
+
   switch (ext) {
     case 'json':
       return loadJsonConfig(resolvedPath);
@@ -293,9 +312,11 @@ export async function loadConfigFile(configPath: string): Promise<TasklyConfig> 
 /**
  * Loads configuration from the current working directory
  */
-export async function loadConfig(cwd: string = process.cwd()): Promise<TasklyConfig | null> {
+export async function loadConfig(
+  cwd: string = process.cwd()
+): Promise<TasklyConfig | null> {
   const configPath = await findConfigFile(cwd);
-  
+
   if (!configPath) {
     return null;
   }
@@ -306,34 +327,40 @@ export async function loadConfig(cwd: string = process.cwd()): Promise<TasklyCon
 /**
  * Creates a default configuration file
  */
-export async function createDefaultConfig(cwd: string = process.cwd()): Promise<string> {
+export async function createDefaultConfig(
+  cwd: string = process.cwd()
+): Promise<string> {
   const configPath = join(resolve(cwd), 'taskly.config.json');
-  
+
   const defaultConfig: TasklyConfig = {
     packageManager: 'npm',
     killOthersOnFail: false,
     maxConcurrency: 4,
     colors: ['blue', 'green', 'yellow', 'red', 'magenta', 'cyan'],
     tasks: {
-      'dev': {
+      dev: {
         command: 'npm run dev',
         identifier: 'dev',
-        color: 'blue'
+        color: 'blue',
       },
-      'test': {
+      test: {
         command: 'npm test',
         identifier: 'test',
-        color: 'green'
-      }
+        color: 'green',
+      },
     },
     options: {
       killOthersOnFail: false,
       maxConcurrency: 4,
-      verbose: false
-    }
+      verbose: false,
+    },
   };
 
-  await fs.writeFile(configPath, JSON.stringify(defaultConfig, null, 2), 'utf-8');
+  await fs.writeFile(
+    configPath,
+    JSON.stringify(defaultConfig, null, 2),
+    'utf-8'
+  );
   return configPath;
 }
 
@@ -373,7 +400,10 @@ export async function safeReadFile(filePath: string): Promise<string | null> {
 /**
  * Safely writes a file with error handling
  */
-export async function safeWriteFile(filePath: string, content: string): Promise<boolean> {
+export async function safeWriteFile(
+  filePath: string,
+  content: string
+): Promise<boolean> {
   try {
     await fs.writeFile(filePath, content, 'utf-8');
     return true;
@@ -385,12 +415,14 @@ export async function safeWriteFile(filePath: string, content: string): Promise<
 /**
  * Gets file stats safely
  */
-export async function getFileStats(filePath: string): Promise<{ size: number; mtime: Date } | null> {
+export async function getFileStats(
+  filePath: string
+): Promise<{ size: number; mtime: Date } | null> {
   try {
     const stats = await fs.stat(filePath);
     return {
       size: stats.size,
-      mtime: stats.mtime
+      mtime: stats.mtime,
     };
   } catch {
     return null;

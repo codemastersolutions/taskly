@@ -44,7 +44,7 @@ export const mockPath = {
   join: vi.fn((...args: string[]) => args.join('/')),
   resolve: vi.fn((...args: string[]) => args.join('/')),
   dirname: vi.fn((path: string) => path.split('/').slice(0, -1).join('/')),
-  basename: vi.fn((path: string) => path.split('/').pop() || ''),
+  basename: vi.fn((path: string) => path.split('/').pop() ?? ''),
   extname: vi.fn((path: string) => {
     const parts = path.split('.');
     return parts.length > 1 ? `.${parts.pop()}` : '';
@@ -94,12 +94,14 @@ export const expectToHaveBeenCalledWithCommand = (
   const calls = mockFn.mock.calls;
   const matchingCall = calls.find(call => {
     const [command, args] = call;
-    const fullCommand = Array.isArray(args) ? `${command} ${args.join(' ')}` : command;
+    const fullCommand = Array.isArray(args)
+      ? `${command} ${args.join(' ')}`
+      : command;
     return fullCommand.includes(expectedCommand);
   });
   expect(matchingCall).toBeDefined();
-  
-  if (expectedOptions) {
+
+  if (expectedOptions && matchingCall) {
     const [, , options] = matchingCall;
     expect(options).toMatchObject(expectedOptions);
   }
@@ -112,14 +114,14 @@ export const waitForCondition = async (
   interval = 100
 ): Promise<void> => {
   const startTime = Date.now();
-  
+
   while (Date.now() - startTime < timeout) {
     if (await condition()) {
       return;
     }
     await new Promise(resolve => setTimeout(resolve, interval));
   }
-  
+
   throw new Error(`Condition not met within ${timeout}ms`);
 };
 
@@ -129,10 +131,10 @@ export const withEnvVars = (
   callback: () => void | Promise<void>
 ) => {
   const originalEnv = { ...process.env };
-  
+
   // Set test environment variables
   Object.assign(process.env, envVars);
-  
+
   try {
     return callback();
   } finally {
@@ -146,15 +148,15 @@ export const captureConsole = () => {
   const logs: string[] = [];
   const errors: string[] = [];
   const warns: string[] = [];
-  
+
   const originalLog = console.log;
   const originalError = console.error;
   const originalWarn = console.warn;
-  
+
   console.log = (...args: any[]) => logs.push(args.join(' '));
   console.error = (...args: any[]) => errors.push(args.join(' '));
   console.warn = (...args: any[]) => warns.push(args.join(' '));
-  
+
   return {
     logs,
     errors,

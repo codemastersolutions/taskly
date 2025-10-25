@@ -1,0 +1,19 @@
+{
+  "name": "setup-branch-protection-action",
+  "version": "1.0.0",
+  "description": "GitHub Action to configure branch protection rules",
+  "main": "action.yml",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@octokit/rest": "^20.0.2"
+  },
+  "keywords": [
+    "github-action",
+    "branch-protection",
+    "security"
+  ],
+  "author": "Auto-Publish System",
+  "license": "MIT"
+}

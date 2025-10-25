@@ -1,0 +1,155 @@
+# Security Configuration for Auto-Publish Workflow
+# This file defines security thresholds and policies
+
+# Vulnerability Thresholds
+vulnerabilities:
+  # Maximum allowed vulnerabilities by severity
+  critical: 0 # No critical vulnerabilities allowed
+  high: 0 # No high vulnerabilities allowed
+  moderate: 5 # Up to 5 moderate vulnerabilities allowed
+  low: 20 # Up to 20 low vulnerabilities allowed
+
+  # Fail workflow if thresholds exceeded
+  fail_on_threshold: true
+
+  # Audit level for npm audit command
+  audit_level: 'moderate'
+
+# License Compatibility
+licenses:
+  # Enable license checking
+  enabled: true
+
+  # Allowed license types (SPDX identifiers)
+  allowed:
+    - 'MIT'
+    - 'Apache-2.0'
+    - 'BSD-2-Clause'
+    - 'BSD-3-Clause'
+    - 'ISC'
+    - '0BSD'
+    - 'Unlicense'
+    - 'CC0-1.0'
+    - 'WTFPL'
+
+  # Licenses that require manual review
+  review_required:
+    - 'GPL-2.0'
+    - 'GPL-3.0'
+    - 'LGPL-2.1'
+    - 'LGPL-3.0'
+    - 'AGPL-3.0'
+    - 'MPL-2.0'
+
+  # Completely forbidden licenses
+  forbidden:
+    - 'UNLICENSED'
+    - 'UNKNOWN'
+
+# Hardcoded Secrets Detection
+secrets:
+  # Enable secrets scanning
+  enabled: true
+
+  # Custom regex patterns for secrets detection
+  custom_patterns:
+    - "(?i)password\\s*[=:]\\s*['\"][^'\"]{8,}['\"]"
+    - "(?i)secret\\s*[=:]\\s*['\"][^'\"]{16,}['\"]"
+    - "(?i)token\\s*[=:]\\s*['\"][^'\"]{20,}['\"]"
+    - "(?i)key\\s*[=:]\\s*['\"][^'\"]{16,}['\"]"
+
+  # File patterns to exclude from scanning
+  exclude_patterns:
+    - '*.test.js'
+    - '*.test.ts'
+    - '*.spec.js'
+    - '*.spec.ts'
+    - 'test-fixtures/*'
+    - 'examples/*'
+    - 'docs/*'
+
+# Dependency Management
+dependencies:
+  # Check for outdated dependencies
+  check_outdated: true
+
+  # Maximum number of outdated dependencies before warning
+  outdated_threshold: 10
+
+  # Automatically update patch versions
+  auto_update_patch: false
+
+  # Automatically update minor versions
+  auto_update_minor: false
+
+# Security Score Calculation
+scoring:
+  # Base score (perfect security)
+  base_score: 100
+
+  # Point deductions
+  deductions:
+    critical_vulnerability: 25 # Points per critical vulnerability
+    high_vulnerability: 15 # Points per high vulnerability
+    moderate_vulnerability: 5 # Points per moderate vulnerability
+    low_vulnerability: 1 # Points per low vulnerability
+    license_issue: 3 # Points per license compatibility issue
+    hardcoded_secret: 10 # Points per potential hardcoded secret
+    outdated_dependency: 1 # Points per outdated dependency (max 10)
+
+  # Grade thresholds
+  grades:
+    A: 90 # Excellent (90-100)
+    B: 80 # Good (80-89)
+    C: 70 # Fair (70-79)
+    D: 60 # Poor (60-69)
+    F: 0 # Critical (0-59)
+
+# Notification Settings
+notifications:
+  # Send notifications on security issues
+  enabled: true
+
+  # Notification channels
+  channels:
+    - 'github_issues' # Create GitHub issues for critical findings
+    - 'pr_comments' # Comment on PRs with security reports
+    - 'step_summary' # Include in GitHub Actions step summary
+
+  # Severity levels that trigger notifications
+  notify_on:
+    - 'critical'
+    - 'high'
+    - 'license_issues'
+    - 'hardcoded_secrets'
+
+# Compliance and Reporting
+compliance:
+  # Generate compliance reports
+  generate_reports: true
+
+  # Report formats
+  formats:
+    - 'json'
+    - 'markdown'
+    - 'sarif' # For GitHub Security tab integration
+
+  # Retention period for security reports (days)
+  retention_days: 90
+
+  # Include in release notes
+  include_in_release: true
+
+# Advanced Security Features
+advanced:
+  # Enable SARIF upload to GitHub Security tab
+  sarif_upload: true
+
+  # Enable dependency graph updates
+  dependency_graph: true
+
+  # Enable security advisories
+  security_advisories: true
+
+  # Enable code scanning integration
+  code_scanning: false

@@ -64,15 +64,15 @@ async function main() {
 
   // Build CommonJS
   log('Building CommonJS...');
-  exec('tsc -p tsconfig.cjs.json');
+  exec('npx tsc -p tsconfig.cjs.json');
 
   // Build ESM
   log('Building ESM...');
-  exec('tsc -p tsconfig.esm.json');
+  exec('npx tsc -p tsconfig.esm.json');
 
   // Build types
   log('Building type definitions...');
-  exec('tsc -p tsconfig.types.json');
+  exec('npx tsc -p tsconfig.types.json');
 
   // Create package.json files for dual package support
   writePackageJson(CJS_DIR, 'commonjs');
@@ -85,30 +85,34 @@ async function main() {
   // Minify if in production mode
   if (process.env.NODE_ENV === 'production') {
     log('Minifying JavaScript files...');
-    
+
     // Minify CommonJS
-    exec(`find ${CJS_DIR} -name '*.js' -not -path '*/node_modules/*' -exec terser {} -o {} --compress --mangle \\;`);
-    
+    exec(
+      `find ${CJS_DIR} -name '*.js' -not -path '*/node_modules/*' -exec npx terser {} -o {} --compress --mangle \\;`
+    );
+
     // Minify ESM
-    exec(`find ${ESM_DIR} -name '*.js' -not -path '*/node_modules/*' -exec terser {} -o {} --compress --mangle --module \\;`);
+    exec(
+      `find ${ESM_DIR} -name '*.js' -not -path '*/node_modules/*' -exec npx terser {} -o {} --compress --mangle --module \\;`
+    );
   }
 
   log('Build completed successfully!');
-  
+
   // Display build stats
   const stats = {
     cjs: fs.readdirSync(CJS_DIR).length,
     esm: fs.readdirSync(ESM_DIR).length,
-    types: fs.readdirSync(TYPES_DIR).length
+    types: fs.readdirSync(TYPES_DIR).length,
   };
-  
+
   log(`Build statistics:`);
   log(`  CommonJS files: ${stats.cjs}`);
   log(`  ESM files: ${stats.esm}`);
   log(`  Type definition files: ${stats.types}`);
 }
 
-main().catch((error) => {
+main().catch(error => {
   console.error('[BUILD ERROR]', error);
   process.exit(1);
 });

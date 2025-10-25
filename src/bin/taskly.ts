@@ -9,6 +9,7 @@
 const { main } = require('../cli/index.js');
 
 main().catch((error: unknown) => {
+  // eslint-disable-next-line no-console -- CLI fatal startup error
   console.error('Fatal error starting Taskly CLI:', error);
   process.exit(1);
 });

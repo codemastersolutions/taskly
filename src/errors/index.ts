@@ -10,48 +10,48 @@ export const ERROR_CODES = {
   INVALID_TASK_CONFIG: 'INVALID_TASK_CONFIG',
   INVALID_OPTIONS: 'INVALID_OPTIONS',
   VALIDATION_ERROR: 'VALIDATION_ERROR',
-  
+
   // Package manager errors
   PM_NOT_FOUND: 'PM_NOT_FOUND',
   PM_DETECTION_FAILED: 'PM_DETECTION_FAILED',
   PM_VALIDATION_FAILED: 'PM_VALIDATION_FAILED',
-  
+
   // Process execution errors
   SPAWN_FAILED: 'SPAWN_FAILED',
   PROCESS_TIMEOUT: 'PROCESS_TIMEOUT',
   PROCESS_KILLED: 'PROCESS_KILLED',
   PROCESS_RESOURCE_LIMIT: 'PROCESS_RESOURCE_LIMIT',
-  
+
   // Task execution errors
   TASK_FAILED: 'TASK_FAILED',
   TASK_DEPENDENCY_FAILED: 'TASK_DEPENDENCY_FAILED',
   TASK_RETRY_EXHAUSTED: 'TASK_RETRY_EXHAUSTED',
-  
+
   // Configuration errors
   CONFIG_ERROR: 'CONFIG_ERROR',
   CONFIG_FILE_NOT_FOUND: 'CONFIG_FILE_NOT_FOUND',
   CONFIG_PARSE_ERROR: 'CONFIG_PARSE_ERROR',
-  
+
   // System errors
   SYSTEM_ERROR: 'SYSTEM_ERROR',
   FILE_SYSTEM_ERROR: 'FILE_SYSTEM_ERROR',
   PERMISSION_DENIED: 'PERMISSION_DENIED',
   RESOURCE_EXHAUSTED: 'RESOURCE_EXHAUSTED',
-  
+
   // Security errors
   SECURITY_VIOLATION: 'SECURITY_VIOLATION',
   COMMAND_INJECTION: 'COMMAND_INJECTION',
-  
+
   // CLI errors
   CLI_PARSE_ERROR: 'CLI_PARSE_ERROR',
   CLI_INVALID_ARGUMENT: 'CLI_INVALID_ARGUMENT',
-  
+
   // Color management errors
   COLOR_ASSIGNMENT_FAILED: 'COLOR_ASSIGNMENT_FAILED',
-  INVALID_COLOR: 'INVALID_COLOR'
+  INVALID_COLOR: 'INVALID_COLOR',
 } as const;
 
-export type ErrorCode = typeof ERROR_CODES[keyof typeof ERROR_CODES];
+export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
 
 /**
  * Error context interface for providing additional debugging information
@@ -87,7 +87,7 @@ export interface ErrorContext {
 export class TasklyError extends Error {
   public readonly name = 'TasklyError';
   public readonly timestamp: number;
-  
+
   constructor(
     message: string,
     public readonly code: ErrorCode,
@@ -95,14 +95,14 @@ export class TasklyError extends Error {
     public readonly originalError?: Error
   ) {
     super(message);
-    
-    this.timestamp = context.timestamp || Date.now();
-    
+
+    this.timestamp = context.timestamp ?? Date.now();
+
     // Maintain proper stack trace for where our error was thrown
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, TasklyError);
     }
-    
+
     // Store original stack trace if available
     if (originalError?.stack) {
       this.context.originalStack = originalError.stack;
@@ -114,31 +114,36 @@ export class TasklyError extends Error {
    */
   getDetailedMessage(): string {
     const parts = [this.message];
-    
+
     if (this.context.taskId) {
       parts.push(`Task: ${this.context.taskId}`);
     }
-    
+
     if (this.context.command) {
       parts.push(`Command: ${this.context.command}`);
     }
-    
+
     if (this.context.cwd) {
       parts.push(`Working Directory: ${this.context.cwd}`);
     }
-    
+
     if (this.context.packageManager) {
       parts.push(`Package Manager: ${this.context.packageManager}`);
     }
-    
+
     if (this.context.exitCode !== undefined) {
       parts.push(`Exit Code: ${this.context.exitCode}`);
     }
-    
-    if (this.context.retryAttempt !== undefined && this.context.maxRetries !== undefined) {
-      parts.push(`Retry: ${this.context.retryAttempt}/${this.context.maxRetries}`);
+
+    if (
+      this.context.retryAttempt !== undefined &&
+      this.context.maxRetries !== undefined
+    ) {
+      parts.push(
+        `Retry: ${this.context.retryAttempt}/${this.context.maxRetries}`
+      );
     }
-    
+
     return parts.join(' | ');
   }
 
@@ -153,11 +158,13 @@ export class TasklyError extends Error {
       timestamp: this.timestamp,
       context: this.context,
       stack: this.stack,
-      originalError: this.originalError ? {
-        name: this.originalError.name,
-        message: this.originalError.message,
-        stack: this.originalError.stack
-      } : undefined
+      originalError: this.originalError
+        ? {
+            name: this.originalError.name,
+            message: this.originalError.message,
+            stack: this.originalError.stack,
+          }
+        : undefined,
     };
   }
 }
@@ -172,7 +179,7 @@ export class ValidationError extends TasklyError {
     originalError?: Error
   ) {
     super(message, ERROR_CODES.VALIDATION_ERROR, context, originalError);
-    this.name = 'ValidationError';
+    Object.defineProperty(this, 'name', { value: 'ValidationError' });
   }
 }
 
@@ -187,7 +194,7 @@ export class PackageManagerError extends TasklyError {
     originalError?: Error
   ) {
     super(message, code, context, originalError);
-    this.name = 'PackageManagerError';
+    Object.defineProperty(this, 'name', { value: 'PackageManagerError' });
   }
 }
 
@@ -202,7 +209,7 @@ export class ProcessError extends TasklyError {
     originalError?: Error
   ) {
     super(message, code, context, originalError);
-    this.name = 'ProcessError';
+    Object.defineProperty(this, 'name', { value: 'ProcessError' });
   }
 }
 
@@ -217,7 +224,7 @@ export class TaskExecutionError extends TasklyError {
     originalError?: Error
   ) {
     super(message, code, context, originalError);
-    this.name = 'TaskExecutionError';
+    Object.defineProperty(this, 'name', { value: 'TaskExecutionError' });
   }
 }
 
@@ -232,7 +239,7 @@ export class ConfigurationError extends TasklyError {
     originalError?: Error
   ) {
     super(message, code, context, originalError);
-    this.name = 'ConfigurationError';
+    Object.defineProperty(this, 'name', { value: 'ConfigurationError' });
   }
 }
 
@@ -247,7 +254,7 @@ export class SecurityError extends TasklyError {
     originalError?: Error
   ) {
     super(message, code, context, originalError);
-    this.name = 'SecurityError';
+    Object.defineProperty(this, 'name', { value: 'SecurityError' });
   }
 }
 
@@ -262,7 +269,7 @@ export class CLIError extends TasklyError {
     originalError?: Error
   ) {
     super(message, code, context, originalError);
-    this.name = 'CLIError';
+    Object.defineProperty(this, 'name', { value: 'CLIError' });
   }
 }
 
@@ -277,7 +284,7 @@ export class SystemError extends TasklyError {
     originalError?: Error
   ) {
     super(message, code, context, originalError);
-    this.name = 'SystemError';
+    Object.defineProperty(this, 'name', { value: 'SystemError' });
   }
 }
 
@@ -300,42 +307,42 @@ export class ErrorFactory {
       case ERROR_CODES.INVALID_TASK_CONFIG:
       case ERROR_CODES.INVALID_OPTIONS:
         return new ValidationError(message, context, originalError);
-        
+
       case ERROR_CODES.PM_NOT_FOUND:
       case ERROR_CODES.PM_DETECTION_FAILED:
       case ERROR_CODES.PM_VALIDATION_FAILED:
         return new PackageManagerError(message, code, context, originalError);
-        
+
       case ERROR_CODES.SPAWN_FAILED:
       case ERROR_CODES.PROCESS_TIMEOUT:
       case ERROR_CODES.PROCESS_KILLED:
       case ERROR_CODES.PROCESS_RESOURCE_LIMIT:
         return new ProcessError(message, code, context, originalError);
-        
+
       case ERROR_CODES.TASK_FAILED:
       case ERROR_CODES.TASK_DEPENDENCY_FAILED:
       case ERROR_CODES.TASK_RETRY_EXHAUSTED:
         return new TaskExecutionError(message, code, context, originalError);
-        
+
       case ERROR_CODES.CONFIG_ERROR:
       case ERROR_CODES.CONFIG_FILE_NOT_FOUND:
       case ERROR_CODES.CONFIG_PARSE_ERROR:
         return new ConfigurationError(message, code, context, originalError);
-        
+
       case ERROR_CODES.SECURITY_VIOLATION:
       case ERROR_CODES.COMMAND_INJECTION:
         return new SecurityError(message, code, context, originalError);
-        
+
       case ERROR_CODES.CLI_PARSE_ERROR:
       case ERROR_CODES.CLI_INVALID_ARGUMENT:
         return new CLIError(message, code, context, originalError);
-        
+
       case ERROR_CODES.SYSTEM_ERROR:
       case ERROR_CODES.FILE_SYSTEM_ERROR:
       case ERROR_CODES.PERMISSION_DENIED:
       case ERROR_CODES.RESOURCE_EXHAUSTED:
         return new SystemError(message, code, context, originalError);
-        
+
       default:
         return new TasklyError(message, code, context, originalError);
     }
@@ -354,12 +361,12 @@ export class ErrorFactory {
     switch (error.code) {
       case 'ENOENT':
         code = ERROR_CODES.FILE_SYSTEM_ERROR;
-        message = `File or directory not found: ${error.path || 'unknown'}`;
+        message = `File or directory not found: ${error.path ?? 'unknown'}`;
         break;
       case 'EACCES':
       case 'EPERM':
         code = ERROR_CODES.PERMISSION_DENIED;
-        message = `Permission denied: ${error.path || 'unknown'}`;
+        message = `Permission denied: ${error.path ?? 'unknown'}`;
         break;
       case 'EMFILE':
       case 'ENFILE':
@@ -368,26 +375,31 @@ export class ErrorFactory {
         break;
       case 'ENOTDIR':
         code = ERROR_CODES.FILE_SYSTEM_ERROR;
-        message = `Not a directory: ${error.path || 'unknown'}`;
+        message = `Not a directory: ${error.path ?? 'unknown'}`;
         break;
       case 'EISDIR':
         code = ERROR_CODES.FILE_SYSTEM_ERROR;
-        message = `Is a directory: ${error.path || 'unknown'}`;
+        message = `Is a directory: ${error.path ?? 'unknown'}`;
         break;
       default:
         code = ERROR_CODES.SYSTEM_ERROR;
         message = `System error: ${error.message}`;
     }
 
-    return ErrorFactory.createError(message, code, {
-      ...context,
-      metadata: {
-        ...context.metadata,
-        errno: error.errno,
-        syscall: error.syscall,
-        path: error.path
-      }
-    }, error);
+    return ErrorFactory.createError(
+      message,
+      code,
+      {
+        ...context,
+        metadata: {
+          ...context.metadata,
+          errno: error.errno,
+          syscall: error.syscall,
+          path: error.path,
+        },
+      },
+      error
+    );
   }
 
   /**
@@ -403,8 +415,8 @@ export class ErrorFactory {
       command,
       metadata: {
         ...context.metadata,
-        errorType: 'spawn'
-      }
+        errorType: 'spawn',
+      },
     };
 
     if ('code' in error) {
@@ -450,7 +462,7 @@ export enum ErrorSeverity {
   LOW = 'low',
   MEDIUM = 'medium',
   HIGH = 'high',
-  CRITICAL = 'critical'
+  CRITICAL = 'critical',
 }
 
 /**
@@ -462,19 +474,19 @@ export function getErrorSeverity(code: ErrorCode): ErrorSeverity {
     case ERROR_CODES.COMMAND_INJECTION:
     case ERROR_CODES.RESOURCE_EXHAUSTED:
       return ErrorSeverity.CRITICAL;
-      
+
     case ERROR_CODES.SPAWN_FAILED:
     case ERROR_CODES.TASK_FAILED:
     case ERROR_CODES.PERMISSION_DENIED:
     case ERROR_CODES.CONFIG_ERROR:
       return ErrorSeverity.HIGH;
-      
+
     case ERROR_CODES.PM_NOT_FOUND:
     case ERROR_CODES.PROCESS_TIMEOUT:
     case ERROR_CODES.VALIDATION_ERROR:
     case ERROR_CODES.CLI_PARSE_ERROR:
       return ErrorSeverity.MEDIUM;
-      
+
     default:
       return ErrorSeverity.LOW;
   }
@@ -487,10 +499,12 @@ export function isRecoverableError(error: TasklyError): boolean {
   const recoverableCodes = [
     ERROR_CODES.PROCESS_TIMEOUT,
     ERROR_CODES.RESOURCE_EXHAUSTED,
-    ERROR_CODES.SYSTEM_ERROR
+    ERROR_CODES.SYSTEM_ERROR,
   ];
-  
-  return recoverableCodes.includes(error.code);
+
+  return recoverableCodes.includes(
+    error.code as (typeof recoverableCodes)[number]
+  );
 }
 
 /**
@@ -499,23 +513,23 @@ export function isRecoverableError(error: TasklyError): boolean {
 export function getUserFriendlyMessage(error: TasklyError): string {
   switch (error.code) {
     case ERROR_CODES.PM_NOT_FOUND:
-      return `Package manager not found. Please install ${error.context.packageManager || 'the required package manager'}.`;
-      
+      return `Package manager not found. Please install ${error.context.packageManager ?? 'the required package manager'}.`;
+
     case ERROR_CODES.SPAWN_FAILED:
-      return `Failed to run command "${error.context.command || 'unknown'}". Check if the command exists and is executable.`;
-      
+      return `Failed to run command "${error.context.command ?? 'unknown'}". Check if the command exists and is executable.`;
+
     case ERROR_CODES.PERMISSION_DENIED:
       return `Permission denied. Check file permissions and try running with appropriate privileges.`;
-      
+
     case ERROR_CODES.PROCESS_TIMEOUT:
       return `Command timed out. Consider increasing the timeout or optimizing the command.`;
-      
+
     case ERROR_CODES.VALIDATION_ERROR:
       return `Invalid configuration. Please check your command syntax and options.`;
-      
+
     case ERROR_CODES.CONFIG_ERROR:
       return `Configuration error. Please check your taskly configuration file.`;
-      
+
     default:
       return error.message;
   }

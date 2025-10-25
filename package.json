@@ -1,6 +1,6 @@
 {
   "name": "@codemastersolutions/taskly",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Zero-dependency TypeScript library for parallel command execution",
   "keywords": [
     "parallel",
@@ -69,6 +69,10 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "engines": {
     "node": ">=16.0.0"
   },
@@ -111,7 +115,7 @@
     "dev:watch": "node scripts/dev.js watch",
     "dev:check": "node scripts/dev.js check",
     "dev:reset": "node scripts/dev.js reset",
-    "prepublishOnly": "npm run quality && npm run build:prod && npm run test"
+    "prepublishOnly": "npm run clean && npm run quality && npm run build:prod && npm run test:ci"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

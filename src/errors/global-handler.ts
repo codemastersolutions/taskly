@@ -4,13 +4,12 @@
  */
 
 import { EventEmitter } from 'events';
-import { 
-  TasklyError, 
-  ErrorFactory, 
-  ERROR_CODES, 
-  getErrorSeverity, 
+import {
+  ERROR_CODES,
+  ErrorFactory,
   ErrorSeverity,
-  getUserFriendlyMessage 
+  TasklyError,
+  getErrorSeverity,
 } from './index.js';
 
 /**
@@ -21,7 +20,7 @@ export enum LogLevel {
   INFO = 'info',
   WARN = 'warn',
   ERROR = 'error',
-  FATAL = 'fatal'
+  FATAL = 'fatal',
 }
 
 /**
@@ -51,7 +50,10 @@ export interface GlobalErrorHandlerOptions {
   /** Exit process on critical errors */
   exitOnCriticalError?: boolean;
   /** Custom error reporter function */
-  errorReporter?: (error: TasklyError, context?: Record<string, unknown>) => void;
+  errorReporter?: (
+    error: TasklyError,
+    context?: Record<string, unknown>
+  ) => void;
   /** Graceful shutdown timeout in milliseconds */
   shutdownTimeout?: number;
   /** Enable error recovery attempts */
@@ -71,17 +73,17 @@ export class GlobalErrorHandler extends EventEmitter {
 
   constructor(options: GlobalErrorHandlerOptions = {}) {
     super();
-    
+
     this.options = {
       enableConsoleLogging: true,
       enableFileLogging: false,
       logFilePath: './taskly-errors.log',
       maxLogEntries: 1000,
       exitOnCriticalError: true,
-      errorReporter: undefined,
+      errorReporter: () => {}, // Default no-op reporter
       shutdownTimeout: 10000, // 10 seconds
       enableRecovery: true,
-      ...options
+      ...options,
     };
   }
 
@@ -107,7 +109,7 @@ export class GlobalErrorHandler extends EventEmitter {
     this.setupUnhandledRejectionHandler();
     this.setupProcessSignalHandlers();
     this.setupWarningHandler();
-    
+
     this.isInitialized = true;
     this.log(LogLevel.INFO, 'Global error handler initialized');
   }
@@ -135,26 +137,32 @@ export class GlobalErrorHandler extends EventEmitter {
   handleError(error: TasklyError, context?: Record<string, unknown>): void {
     const severity = getErrorSeverity(error.code);
     const logLevel = this.getLogLevelFromSeverity(severity);
-    
+
     // Log the error
     this.log(logLevel, error.getDetailedMessage(), error, context);
-    
+
     // Emit error event for listeners
     this.emit('error', error, context);
-    
+
     // Call custom error reporter if provided
     if (this.options.errorReporter) {
       try {
         this.options.errorReporter(error, context);
       } catch (reporterError) {
         this.log(LogLevel.ERROR, 'Error reporter failed', undefined, {
-          reporterError: reporterError instanceof Error ? reporterError.message : String(reporterError)
+          reporterError:
+            reporterError instanceof Error
+              ? reporterError.message
+              : String(reporterError),
         });
       }
     }
 
     // Handle critical errors
-    if (severity === ErrorSeverity.CRITICAL && this.options.exitOnCriticalError) {
+    if (
+      severity === ErrorSeverity.CRITICAL &&
+      this.options.exitOnCriticalError
+    ) {
       this.log(LogLevel.FATAL, 'Critical error detected, initiating shutdown');
       // Don't await gracefulShutdown to avoid blocking
       this.gracefulShutdown(1).catch(() => {
@@ -167,9 +175,9 @@ export class GlobalErrorHandler extends EventEmitter {
    * Log an entry with specified level
    */
   log(
-    level: LogLevel, 
-    message: string, 
-    error?: TasklyError, 
+    level: LogLevel,
+    message: string,
+    error?: TasklyError,
     context?: Record<string, unknown>
   ): void {
     const entry: ErrorLogEntry = {
@@ -178,12 +186,12 @@ export class GlobalErrorHandler extends EventEmitter {
       message,
       error,
       context,
-      stack: error?.stack
+      stack: error?.stack,
     };
 
     // Add to in-memory log
     this.errorLog.push(entry);
-    
+
     // Trim log if it exceeds max entries
     if (this.errorLog.length > this.options.maxLogEntries) {
       this.errorLog.shift();
@@ -231,19 +239,19 @@ export class GlobalErrorHandler extends EventEmitter {
       [LogLevel.INFO]: 0,
       [LogLevel.WARN]: 0,
       [LogLevel.ERROR]: 0,
-      [LogLevel.FATAL]: 0
+      [LogLevel.FATAL]: 0,
     };
 
     const errorsBySeverity: Record<ErrorSeverity, number> = {
       [ErrorSeverity.LOW]: 0,
       [ErrorSeverity.MEDIUM]: 0,
       [ErrorSeverity.HIGH]: 0,
-      [ErrorSeverity.CRITICAL]: 0
+      [ErrorSeverity.CRITICAL]: 0,
     };
 
     for (const entry of this.errorLog) {
       errorsByLevel[entry.level]++;
-      
+
       if (entry.error) {
         const severity = getErrorSeverity(entry.error.code);
         errorsBySeverity[severity]++;
@@ -251,15 +259,13 @@ export class GlobalErrorHandler extends EventEmitter {
     }
 
     // Get recent errors (last 10)
-    const recentErrors = this.errorLog
-      .filter(entry => entry.error)
-      .slice(-10);
+    const recentErrors = this.errorLog.filter(entry => entry.error).slice(-10);
 
     return {
       totalErrors: this.errorLog.length,
       errorsByLevel,
       errorsBySeverity,
-      recentErrors
+      recentErrors,
     };
   }
 
@@ -279,24 +285,26 @@ export class GlobalErrorHandler extends EventEmitter {
       // Execute shutdown callbacks with timeout
       const shutdownPromise = this.executeShutdownCallbacks();
       const timeoutPromise = new Promise<void>((_, reject) => {
-        setTimeout(() => reject(new Error('Shutdown timeout')), this.options.shutdownTimeout);
+        setTimeout(
+          () => reject(new Error('Shutdown timeout')),
+          this.options.shutdownTimeout
+        );
       });
 
       await Promise.race([shutdownPromise, timeoutPromise]);
-      
+
       this.log(LogLevel.INFO, 'Graceful shutdown completed');
       this.emit('shutdown:complete', { exitCode });
-      
     } catch (error) {
       this.log(LogLevel.ERROR, 'Error during graceful shutdown', undefined, {
-        shutdownError: error instanceof Error ? error.message : String(error)
+        shutdownError: error instanceof Error ? error.message : String(error),
       });
       this.emit('shutdown:error', { error, exitCode });
     }
 
     // Final cleanup
     this.cleanup();
-    
+
     // Exit process
     process.exit(exitCode);
   }
@@ -312,16 +320,16 @@ export class GlobalErrorHandler extends EventEmitter {
         {
           metadata: {
             type: 'uncaughtException',
-            originalName: error.name
-          }
+            originalName: error.name,
+          },
         },
         error
       );
 
       this.handleError(tasklyError, { type: 'uncaughtException' });
-      
+
       // Always exit on uncaught exceptions after logging
-      this.gracefulShutdown(1);
+      void this.gracefulShutdown(1);
     });
   }
 
@@ -329,29 +337,33 @@ export class GlobalErrorHandler extends EventEmitter {
    * Setup unhandled rejection handler
    */
   private setupUnhandledRejectionHandler(): void {
-    process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
-      const error = reason instanceof Error ? reason : new Error(String(reason));
-      
-      const tasklyError = ErrorFactory.createError(
-        `Unhandled promise rejection: ${error.message}`,
-        ERROR_CODES.SYSTEM_ERROR,
-        {
-          metadata: {
-            type: 'unhandledRejection',
-            reason: String(reason)
-          }
-        },
-        error
-      );
+    process.on(
+      'unhandledRejection',
+      (reason: unknown, promise: Promise<unknown>) => {
+        const error =
+          reason instanceof Error ? reason : new Error(String(reason));
 
-      this.handleError(tasklyError, { 
-        type: 'unhandledRejection',
-        promise: promise.toString()
-      });
+        const tasklyError = ErrorFactory.createError(
+          `Unhandled promise rejection: ${error.message}`,
+          ERROR_CODES.SYSTEM_ERROR,
+          {
+            metadata: {
+              type: 'unhandledRejection',
+              reason: String(reason),
+            },
+          },
+          error
+        );
 
-      // Don't exit on unhandled rejections by default, just log them
-      // The application can decide whether to continue or not
-    });
+        this.handleError(tasklyError, {
+          type: 'unhandledRejection',
+          promise: promise.toString(),
+        });
+
+        // Don't exit on unhandled rejections by default, just log them
+        // The application can decide whether to continue or not
+      }
+    );
   }
 
   /**
@@ -359,12 +371,12 @@ export class GlobalErrorHandler extends EventEmitter {
    */
   private setupProcessSignalHandlers(): void {
     const signals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGHUP'];
-    
+
     for (const signal of signals) {
       process.on(signal, () => {
         this.log(LogLevel.INFO, `Received ${signal} signal`);
         this.emit('signal', { signal });
-        this.gracefulShutdown(0);
+        void this.gracefulShutdown(0);
       });
     }
   }
@@ -374,10 +386,15 @@ export class GlobalErrorHandler extends EventEmitter {
    */
   private setupWarningHandler(): void {
     process.on('warning', (warning: Error) => {
-      this.log(LogLevel.WARN, `Process warning: ${warning.message}`, undefined, {
-        warningName: warning.name,
-        warningStack: warning.stack
-      });
+      this.log(
+        LogLevel.WARN,
+        `Process warning: ${warning.message}`,
+        undefined,
+        {
+          warningName: warning.name,
+          warningStack: warning.stack,
+        }
+      );
     });
   }
 
@@ -385,12 +402,12 @@ export class GlobalErrorHandler extends EventEmitter {
    * Execute all shutdown callbacks
    */
   private async executeShutdownCallbacks(): Promise<void> {
-    const promises = this.shutdownCallbacks.map(async (callback) => {
+    const promises = this.shutdownCallbacks.map(async callback => {
       try {
         await callback();
       } catch (error) {
         this.log(LogLevel.ERROR, 'Shutdown callback failed', undefined, {
-          callbackError: error instanceof Error ? error.message : String(error)
+          callbackError: error instanceof Error ? error.message : String(error),
         });
       }
     });
@@ -427,24 +444,30 @@ export class GlobalErrorHandler extends EventEmitter {
     switch (entry.level) {
       case LogLevel.FATAL:
       case LogLevel.ERROR:
+        // eslint-disable-next-line no-console -- Error logging output
         console.error(message);
         if (entry.error?.stack) {
+          // eslint-disable-next-line no-console -- Error stack trace output
           console.error(entry.error.stack);
         }
         break;
       case LogLevel.WARN:
+        // eslint-disable-next-line no-console -- Warning logging output
         console.warn(message);
         break;
       case LogLevel.INFO:
+        // eslint-disable-next-line no-console -- Info logging output
         console.info(message);
         break;
       case LogLevel.DEBUG:
+        // eslint-disable-next-line no-console -- Debug logging output
         console.debug(message);
         break;
     }
 
     // Log context if available
     if (entry.context && Object.keys(entry.context).length > 0) {
+      // eslint-disable-next-line no-console -- Context logging output
       console.log('Context:', JSON.stringify(entry.context, null, 2));
     }
   }
@@ -460,21 +483,24 @@ export class GlobalErrorHandler extends EventEmitter {
       const timestamp = new Date(entry.timestamp).toISOString();
       const level = entry.level.toUpperCase();
       const logLine = `[${timestamp}] [${level}] ${entry.message}\n`;
-      
+
       fs.appendFileSync(this.options.logFilePath, logLine);
-      
+
       if (entry.error?.stack) {
         fs.appendFileSync(this.options.logFilePath, `${entry.error.stack}\n`);
       }
-      
+
       if (entry.context) {
-        fs.appendFileSync(this.options.logFilePath, `Context: ${JSON.stringify(entry.context)}\n`);
+        fs.appendFileSync(
+          this.options.logFilePath,
+          `Context: ${JSON.stringify(entry.context)}\n`
+        );
       }
-      
+
       fs.appendFileSync(this.options.logFilePath, '\n');
-      
     } catch (fileError) {
       // Fallback to console if file logging fails
+      // eslint-disable-next-line no-console -- File logging fallback error
       console.error('Failed to write to log file:', fileError);
     }
   }
@@ -493,7 +519,9 @@ export class GlobalErrorHandler extends EventEmitter {
 /**
  * Convenience function to initialize global error handling
  */
-export function initializeGlobalErrorHandling(options?: GlobalErrorHandlerOptions): GlobalErrorHandler {
+export function initializeGlobalErrorHandling(
+  options?: GlobalErrorHandlerOptions
+): GlobalErrorHandler {
   const handler = GlobalErrorHandler.getInstance(options);
   handler.initialize();
   return handler;
@@ -502,7 +530,10 @@ export function initializeGlobalErrorHandling(options?: GlobalErrorHandlerOption
 /**
  * Convenience function to handle errors globally
  */
-export function handleGlobalError(error: TasklyError, context?: Record<string, unknown>): void {
+export function handleGlobalError(
+  error: TasklyError,
+  context?: Record<string, unknown>
+): void {
   const handler = GlobalErrorHandler.getInstance();
   handler.handleError(error, context);
 }
@@ -510,7 +541,9 @@ export function handleGlobalError(error: TasklyError, context?: Record<string, u
 /**
  * Convenience function to add shutdown callback
  */
-export function addGlobalShutdownCallback(callback: () => Promise<void> | void): void {
+export function addGlobalShutdownCallback(
+  callback: () => Promise<void> | void
+): void {
   const handler = GlobalErrorHandler.getInstance();
   handler.addShutdownCallback(callback);
 }

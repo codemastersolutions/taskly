@@ -2,9 +2,9 @@
  * CLI Argument Parser Tests
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
-import { ArgumentParser, parseArgs, getHelp } from '../../cli/parser.js';
-import { TasklyError, ERROR_CODES } from '../../types/index.js';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { ArgumentParser, getHelp, parseArgs } from '../../cli/parser.js';
+import { TasklyError } from '../../types/index.js';
 
 describe('ArgumentParser', () => {
   let parser: ArgumentParser;
@@ -16,7 +16,7 @@ describe('ArgumentParser', () => {
   describe('basic argument parsing', () => {
     it('should parse simple commands', () => {
       const result = parser.parse(['npm run dev', 'npm run test']);
-      
+
       expect(result.options.commands).toEqual(['npm run dev', 'npm run test']);
       expect(result.options.help).toBe(false);
       expect(result.options.version).toBe(false);
@@ -24,7 +24,9 @@ describe('ArgumentParser', () => {
 
     it('should handle empty arguments', () => {
       expect(() => parser.parse([])).toThrow(TasklyError);
-      expect(() => parser.parse([])).toThrow('At least one command is required');
+      expect(() => parser.parse([])).toThrow(
+        'At least one command is required'
+      );
     });
 
     it('should handle help flag', () => {
@@ -40,57 +42,75 @@ describe('ArgumentParser', () => {
 
   describe('long options', () => {
     it('should parse --names option', () => {
-      const result = parser.parse(['--names', 'dev,test', 'npm run dev', 'npm run test']);
-      
+      const result = parser.parse([
+        '--names',
+        'dev,test',
+        'npm run dev',
+        'npm run test',
+      ]);
+
       expect(result.options.names).toEqual(['dev', 'test']);
       expect(result.options.commands).toEqual(['npm run dev', 'npm run test']);
     });
 
     it('should parse --names with equals syntax', () => {
-      const result = parser.parse(['--names=dev,test', 'npm run dev', 'npm run test']);
-      
+      const result = parser.parse([
+        '--names=dev,test',
+        'npm run dev',
+        'npm run test',
+      ]);
+
       expect(result.options.names).toEqual(['dev', 'test']);
     });
 
     it('should parse --colors option', () => {
-      const result = parser.parse(['--colors', 'blue,green', 'npm run dev', 'npm run test']);
-      
+      const result = parser.parse([
+        '--colors',
+        'blue,green',
+        'npm run dev',
+        'npm run test',
+      ]);
+
       expect(result.options.colors).toEqual(['blue', 'green']);
     });
 
     it('should parse --package-manager option', () => {
       const result = parser.parse(['--package-manager', 'yarn', 'yarn dev']);
-      
+
       expect(result.options.packageManager).toBe('yarn');
     });
 
     it('should parse --pm alias', () => {
       const result = parser.parse(['--pm', 'pnpm', 'pnpm dev']);
-      
+
       expect(result.options.packageManager).toBe('pnpm');
     });
 
     it('should parse --kill-others-on-fail option', () => {
       const result = parser.parse(['--kill-others-on-fail', 'npm run dev']);
-      
+
       expect(result.options.killOthersOnFail).toBe(true);
     });
 
     it('should parse --max-concurrency option', () => {
       const result = parser.parse(['--max-concurrency', '4', 'npm run dev']);
-      
+
       expect(result.options.maxConcurrency).toBe(4);
     });
 
     it('should parse --config option', () => {
-      const result = parser.parse(['--config', 'taskly.config.json', 'npm run dev']);
-      
+      const result = parser.parse([
+        '--config',
+        'taskly.config.json',
+        'npm run dev',
+      ]);
+
       expect(result.options.config).toBe('taskly.config.json');
     });
 
     it('should parse --verbose option', () => {
       const result = parser.parse(['--verbose', 'npm run dev']);
-      
+
       expect(result.options.verbose).toBe(true);
     });
   });
@@ -117,12 +137,22 @@ describe('ArgumentParser', () => {
     });
 
     it('should parse -n for names', () => {
-      const result = parser.parse(['-n', 'dev,test', 'npm run dev', 'npm run test']);
+      const result = parser.parse([
+        '-n',
+        'dev,test',
+        'npm run dev',
+        'npm run test',
+      ]);
       expect(result.options.names).toEqual(['dev', 'test']);
     });
 
     it('should parse -c for colors', () => {
-      const result = parser.parse(['-c', 'blue,green', 'npm run dev', 'npm run test']);
+      const result = parser.parse([
+        '-c',
+        'blue,green',
+        'npm run dev',
+        'npm run test',
+      ]);
       expect(result.options.colors).toEqual(['blue', 'green']);
     });
 
@@ -145,64 +175,78 @@ describe('ArgumentParser', () => {
 
   describe('validation', () => {
     it('should validate package manager values', () => {
-      expect(() => parser.parse(['--package-manager', 'invalid', 'npm run dev']))
-        .toThrow('Invalid package manager: invalid');
+      expect(() =>
+        parser.parse(['--package-manager', 'invalid', 'npm run dev'])
+      ).toThrow('Invalid package manager: invalid');
     });
 
     it('should validate max concurrency is positive', () => {
-      expect(() => parser.parse(['--max-concurrency', '0', 'npm run dev']))
-        .toThrow('Max concurrency must be greater than 0');
+      expect(() =>
+        parser.parse(['--max-concurrency', '0', 'npm run dev'])
+      ).toThrow('Max concurrency must be greater than 0');
     });
 
     it('should validate max concurrency is a number', () => {
-      expect(() => parser.parse(['--max-concurrency', 'invalid', 'npm run dev']))
-        .toThrow('Invalid number value: invalid');
+      expect(() =>
+        parser.parse(['--max-concurrency', 'invalid', 'npm run dev'])
+      ).toThrow('Invalid number value: invalid');
     });
 
     it('should validate names array length matches commands', () => {
-      expect(() => parser.parse(['--names', 'dev', 'npm run dev', 'npm run test']))
-        .toThrow('Number of names (1) must match number of commands (2)');
+      expect(() =>
+        parser.parse(['--names', 'dev', 'npm run dev', 'npm run test'])
+      ).toThrow('Number of names (1) must match number of commands (2)');
     });
 
     it('should validate colors array length matches commands', () => {
-      expect(() => parser.parse(['--colors', 'blue', 'npm run dev', 'npm run test']))
-        .toThrow('Number of colors (1) must match number of commands (2)');
+      expect(() =>
+        parser.parse(['--colors', 'blue', 'npm run dev', 'npm run test'])
+      ).toThrow('Number of colors (1) must match number of commands (2)');
     });
 
     it('should validate commands are not empty', () => {
-      expect(() => parser.parse(['', 'npm run test']))
-        .toThrow('Command at index 0 is empty');
+      expect(() => parser.parse(['', 'npm run test'])).toThrow(
+        'Command at index 0 is empty'
+      );
     });
 
     it('should throw error for unknown long option', () => {
-      expect(() => parser.parse(['--unknown', 'npm run dev']))
-        .toThrow('Unknown option: --unknown');
+      expect(() => parser.parse(['--unknown', 'npm run dev'])).toThrow(
+        'Unknown option: --unknown'
+      );
     });
 
     it('should throw error for unknown short option', () => {
-      expect(() => parser.parse(['-x', 'npm run dev']))
-        .toThrow('Unknown option: -x');
+      expect(() => parser.parse(['-x', 'npm run dev'])).toThrow(
+        'Unknown option: -x'
+      );
     });
 
     it('should require value for options that need it', () => {
-      expect(() => parser.parse(['--names']))
-        .toThrow('Option --names requires a value');
+      expect(() => parser.parse(['--names'])).toThrow(
+        'Option --names requires a value'
+      );
     });
   });
 
   describe('complex scenarios', () => {
     it('should parse complex command with all options', () => {
       const result = parser.parse([
-        '--names', 'dev,test,lint',
-        '--colors', 'blue,green,yellow',
-        '--package-manager', 'yarn',
+        '--names',
+        'dev,test,lint',
+        '--colors',
+        'blue,green,yellow',
+        '--package-manager',
+        'yarn',
         '--kill-others-on-fail',
-        '--max-concurrency', '3',
+        '--max-concurrency',
+        '3',
         '--verbose',
-        '--config', 'my-config.json',
+        '--config',
+        'my-config.json',
         'yarn dev',
         'yarn test',
-        'yarn lint'
+        'yarn lint',
       ]);
 
       expect(result.options).toEqual({
@@ -215,17 +259,19 @@ describe('ArgumentParser', () => {
         verbose: true,
         config: 'my-config.json',
         help: false,
-        version: false
+        version: false,
       });
     });
 
     it('should handle mixed long and short options', () => {
       const result = parser.parse([
         '-kV',
-        '--names', 'dev,test',
-        '-p', 'yarn',
+        '--names',
+        'dev,test',
+        '-p',
+        'yarn',
         'yarn dev',
-        'yarn test'
+        'yarn test',
       ]);
 
       expect(result.options.killOthersOnFail).toBe(true);
@@ -238,13 +284,13 @@ describe('ArgumentParser', () => {
       const result = parser.parse([
         'npm run "build:prod"',
         'echo "Hello World"',
-        'ls -la'
+        'ls -la',
       ]);
 
       expect(result.options.commands).toEqual([
         'npm run "build:prod"',
         'echo "Hello World"',
-        'ls -la'
+        'ls -la',
       ]);
     });
   });
@@ -280,7 +326,9 @@ describe('parseArgs function', () => {
 describe('getHelp function', () => {
   it('should return help text', () => {
     const help = getHelp();
-    expect(help).toContain('Taskly - Zero-dependency parallel command execution');
+    expect(help).toContain(
+      'Taskly - Zero-dependency parallel command execution'
+    );
     expect(help).toContain('Usage:');
     expect(help).toContain('Options:');
     expect(help).toContain('Examples:');

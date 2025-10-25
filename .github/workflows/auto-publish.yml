@@ -1,0 +1,924 @@
+name: Auto Publish
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
+  workflow_dispatch:
+    inputs:
+      force-publish:
+        description: 'Force publish even if no changes detected'
+        required: false
+        default: false
+        type: boolean
+      dry-run:
+        description: 'Run in dry-run mode (no actual publishing)'
+        required: false
+        default: false
+        type: boolean
+
+# Minimal required permissions for auto-publish workflow
+permissions:
+  contents: write # Create tags, commits, and releases
+  pull-requests: read # Read PR information for changelog
+  packages: write # Publish to GitHub Packages (if used)
+  actions: read # Read workflow information
+
+env:
+  NODE_VERSION: '18.x'
+  MIN_COVERAGE: 80
+  REGISTRY_URL: 'https://registry.npmjs.org'
+
+jobs:
+  validate-secrets:
+    name: Validate Secrets
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    outputs:
+      secrets-valid: ${{ steps.validate.outputs.validation-result }}
+      npm-username: ${{ steps.validate.outputs.npm-username }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        id: validate
+        uses: ./.github/actions/validate-secrets
+        with:
+          npm-token: ${{ secrets.NPM_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          check-npm-auth: ${{ github.event.inputs.dry-run != 'true' }}
+          registry-url: ${{ env.REGISTRY_URL }}
+
+      - name: Fail if secrets invalid
+        if: steps.validate.outputs.validation-result != 'success'
+        run: |
+          echo "❌ Secret validation failed - cannot proceed with publishing"
+          echo "Please check the secrets configuration and try again"
+          exit 1
+
+  version-management:
+    name: Version Management
+    runs-on: ubuntu-latest
+    needs: validate-secrets
+    if: github.ref == 'refs/heads/main' && needs.validate-secrets.outputs.secrets-valid == 'success'
+
+    outputs:
+      current-version: ${{ steps.version.outputs.current-version }}
+      new-version: ${{ steps.version.outputs.new-version }}
+      increment-type: ${{ steps.version.outputs.increment-type }}
+      reason: ${{ steps.version.outputs.reason }}
+      has-changes: ${{ steps.version.outputs.has-changes }}
+      breaking-changes: ${{ steps.version.outputs.breaking-changes }}
+      features: ${{ steps.version.outputs.features }}
+      fixes: ${{ steps.version.outputs.fixes }}
+      should-publish: ${{ steps.check-publish.outputs.should-publish }}
+      tag-name: ${{ steps.create-tag.outputs.tag-name }}
+      commit-sha: ${{ steps.create-tag.outputs.commit-sha }}
+      tag-created: ${{ steps.create-tag.outputs.tag-created }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Analyze version and update files
+        id: version
+        uses: ./.github/actions/version-management
+        with:
+          dry-run: ${{ github.event.inputs.dry-run || 'false' }}
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Check if should publish
+        id: check-publish
+        run: |
+          HAS_CHANGES="${{ steps.version.outputs.has-changes }}"
+          FORCE_PUBLISH="${{ github.event.inputs.force-publish }}"
+
+          if [ "$HAS_CHANGES" = "true" ] || [ "$FORCE_PUBLISH" = "true" ]; then
+            echo "should-publish=true" >> $GITHUB_OUTPUT
+            echo "✅ Publishing will proceed"
+          else
+            echo "should-publish=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No changes detected, skipping publish"
+          fi
+
+      - name: Create version commit and tag
+        id: create-tag
+        if: steps.check-publish.outputs.should-publish == 'true'
+        uses: ./.github/actions/git-tag-version
+        with:
+          version: ${{ steps.version.outputs.new-version }}
+          increment-type: ${{ steps.version.outputs.increment-type }}
+          reason: ${{ steps.version.outputs.reason }}
+          breaking-changes: ${{ steps.version.outputs.breaking-changes }}
+          features: ${{ steps.version.outputs.features }}
+          fixes: ${{ steps.version.outputs.fixes }}
+          commit-sha: ${{ steps.version.outputs.commit-sha }}
+          dry-run: ${{ github.event.inputs.dry-run || 'false' }}
+
+      - name: Generate version management summary
+        run: |
+          echo "## 🎯 Version Management Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Current Version:** \`${{ steps.version.outputs.current-version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **New Version:** \`${{ steps.version.outputs.new-version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Increment Type:** \`${{ steps.version.outputs.increment-type }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Reason:** ${{ steps.version.outputs.reason }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Should Publish:** ${{ steps.check-publish.outputs.should-publish }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.check-publish.outputs.should-publish }}" = "true" ]; then
+            echo "🚀 **Next Steps:** Pre-publish validation and publishing will proceed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⏹️ **Result:** No publishing needed - no significant changes detected" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  pre-publish-validation:
+    name: Pre-Publish Validation
+    runs-on: ubuntu-latest
+    needs: [validate-secrets, version-management]
+    if: needs.version-management.outputs.should-publish == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Pull latest changes
+        run: |
+          git pull origin main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run quality checks
+        uses: ./.github/actions/quality-check
+
+      - name: Run security audit
+        uses: ./.github/actions/security-audit
+
+      - name: Run full test suite
+        run: npm run test:ci
+
+      - name: Build production artifacts
+        run: npm run build:prod
+
+      - name: Validate build artifacts
+        run: |
+          echo "🔍 Validating build artifacts..."
+
+          # Check that all expected files exist
+          REQUIRED_FILES=(
+            "dist/cjs/index.js"
+            "dist/esm/index.js"
+            "dist/types/index.d.ts"
+            "dist/cjs/bin/taskly.js"
+          )
+
+          for file in "${REQUIRED_FILES[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Missing required file: $file"
+              exit 1
+            fi
+            echo "✅ Found: $file"
+          done
+
+          # Test that the built CLI is executable
+          echo "🧪 Testing CLI executable..."
+          node dist/cjs/bin/taskly.js --version
+
+          # Test imports
+          echo "🧪 Testing module imports..."
+          node -e "const taskly = require('./dist/cjs/index.js'); console.log('CJS import successful');"
+          node -e "import('./dist/esm/index.js').then(() => console.log('ESM import successful'));"
+
+          echo "✅ All build artifacts validated"
+
+      - name: Generate validation summary
+        run: |
+          echo "## ✅ Pre-Publish Validation Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All validation checks passed:" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Quality checks (lint, format, type-check)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Security audit" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Full test suite" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Production build" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Build artifacts validation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🚀 **Ready for publishing!**" >> $GITHUB_STEP_SUMMARY
+
+  publish-matrix:
+    name: Publish Matrix Tests
+    runs-on: ${{ matrix.os }}
+    needs: [validate-secrets, version-management, pre-publish-validation]
+    if: needs.version-management.outputs.should-publish == 'true'
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: ['16.x', '18.x', '20.x']
+      fail-fast: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Pull latest changes
+        run: git pull origin main
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build:prod
+
+      - name: Run tests
+        run: npm test
+
+      - name: Test package installation simulation
+        run: |
+          # Create a temporary directory for testing
+          mkdir -p temp-test
+          cd temp-test
+
+          # Initialize a test package
+          npm init -y
+
+          # Pack the parent package
+          cd ..
+          npm pack
+
+          # Install the packed package
+          cd temp-test
+          PACKAGE_FILE=$(ls ../*.tgz | head -1)
+          npm install "$PACKAGE_FILE"
+
+          # Test CLI functionality
+          echo "Testing CLI..."
+          npx taskly --version
+
+          # Test programmatic usage
+          echo "Testing programmatic usage..."
+          node -e "
+            const taskly = require('@codemastersolutions/taskly');
+            console.log('Package loaded successfully');
+          "
+
+          # Cleanup
+          cd ..
+          rm -rf temp-test *.tgz
+
+      - name: Report matrix test result
+        run: |
+          echo "✅ Matrix test passed: ${{ matrix.os }} with Node.js ${{ matrix.node-version }}"
+
+  npm-publish:
+    name: NPM Publish
+    runs-on: ubuntu-latest
+    needs:
+      [
+        validate-secrets,
+        version-management,
+        pre-publish-validation,
+        publish-matrix,
+      ]
+    if: needs.version-management.outputs.should-publish == 'true' && github.event.inputs.dry-run != 'true'
+
+    environment:
+      name: production
+      url: https://www.npmjs.com/package/@codemastersolutions/taskly
+
+    # Additional permissions for publishing
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      published-version: ${{ steps.publish.outputs.published-version }}
+      npm-url: ${{ steps.publish.outputs.npm-url }}
+      package-size: ${{ steps.publish.outputs.package-size }}
+      published-files: ${{ steps.publish.outputs.published-files }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Pull latest changes
+        run: git pull origin main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          registry-url: ${{ env.REGISTRY_URL }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production artifacts
+        run: npm run build:prod
+
+      - name: Validate NPM token
+        run: |
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "❌ NPM_TOKEN secret is not configured"
+            exit 1
+          fi
+
+          echo "✅ NPM_TOKEN is configured"
+
+          # Test authentication
+          npm whoami
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Verify package configuration
+        run: |
+          echo "🔍 Verifying package configuration..."
+
+          # Check package.json files field
+          FILES=$(node -e "console.log(JSON.stringify(require('./package.json').files))")
+          echo "Files to be published: $FILES"
+
+          # Verify all files exist
+          npm pack --dry-run
+
+          # Check entry points
+          MAIN=$(node -e "console.log(require('./package.json').main)")
+          MODULE=$(node -e "console.log(require('./package.json').module)")
+          TYPES=$(node -e "console.log(require('./package.json').types)")
+          BIN=$(node -e "console.log(require('./package.json').bin.taskly)")
+
+          echo "Checking entry points:"
+          echo "- Main (CJS): $MAIN"
+          echo "- Module (ESM): $MODULE" 
+          echo "- Types: $TYPES"
+          echo "- Binary: $BIN"
+
+          for file in "$MAIN" "$MODULE" "$TYPES" "$BIN"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Missing entry point: $file"
+              exit 1
+            fi
+            echo "✅ Found: $file"
+          done
+
+      - name: Run pre-publish checks
+        run: |
+          echo "🧪 Running pre-publish checks..."
+
+          # Run prepublishOnly script
+          npm run prepublishOnly
+
+          echo "✅ Pre-publish checks completed"
+
+      - name: Publish to NPM
+        id: publish
+        run: |
+          echo "🚀 Publishing to NPM..."
+
+          VERSION="${{ needs.version-management.outputs.new-version }}"
+          PACKAGE_NAME="@codemastersolutions/taskly"
+
+          # Publish the package
+          npm publish --access public
+
+          # Verify publication
+          sleep 10  # Wait for NPM to process
+
+          PUBLISHED_VERSION=$(npm view $PACKAGE_NAME version)
+          if [ "$PUBLISHED_VERSION" = "$VERSION" ]; then
+            echo "✅ Successfully published version $VERSION"
+          else
+            echo "❌ Publication verification failed. Expected: $VERSION, Got: $PUBLISHED_VERSION"
+            exit 1
+          fi
+
+          # Get package info
+          NPM_URL="https://www.npmjs.com/package/$PACKAGE_NAME/v/$VERSION"
+          PACKAGE_SIZE=$(npm pack --dry-run 2>&1 | grep "package size" | awk '{print $3 " " $4}' || echo "unknown")
+
+          # Get list of published files
+          PUBLISHED_FILES=$(npm pack --dry-run 2>&1 | grep -E "^\s*[0-9]+" | awk '{print $2}' | tr '\n' ',' | sed 's/,$//')
+
+          # Set outputs
+          echo "published-version=$VERSION" >> $GITHUB_OUTPUT
+          echo "npm-url=$NPM_URL" >> $GITHUB_OUTPUT
+          echo "package-size=$PACKAGE_SIZE" >> $GITHUB_OUTPUT
+          echo "published-files=$PUBLISHED_FILES" >> $GITHUB_OUTPUT
+
+          echo "📦 Package published successfully!"
+          echo "- Version: $VERSION"
+          echo "- URL: $NPM_URL"
+          echo "- Size: $PACKAGE_SIZE"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Verify publication
+        run: |
+          echo "🔍 Verifying publication..."
+
+          VERSION="${{ steps.publish.outputs.published-version }}"
+          PACKAGE_NAME="@codemastersolutions/taskly"
+
+          # Wait a bit more for NPM to fully process
+          sleep 15
+
+          # Try to install the published package
+          mkdir -p temp-verify
+          cd temp-verify
+          npm init -y
+
+          echo "Installing published package..."
+          npm install $PACKAGE_NAME@$VERSION
+
+          # Test the installed package
+          echo "Testing installed package..."
+          npx taskly --version
+
+          node -e "
+            const taskly = require('$PACKAGE_NAME');
+            console.log('✅ Package import successful');
+          "
+
+          cd ..
+          rm -rf temp-verify
+
+          echo "✅ Publication verification completed"
+
+      - name: Generate publish summary
+        run: |
+          echo "## 🚀 NPM Publication Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Package:** \`@codemastersolutions/taskly\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** \`${{ steps.publish.outputs.published-version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **NPM URL:** [${{ steps.publish.outputs.published-version }}](${{ steps.publish.outputs.npm-url }})" >> $GITHUB_STEP_SUMMARY
+          echo "- **Package Size:** ${{ steps.publish.outputs.package-size }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Registry:** ${{ env.REGISTRY_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📁 Published Files" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.publish.outputs.published-files }}" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🎉 **Package successfully published and verified!**" >> $GITHUB_STEP_SUMMARY
+
+  github-release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate-secrets, version-management, npm-publish]
+    if: needs.version-management.outputs.should-publish == 'true' && github.event.inputs.dry-run != 'true'
+
+    outputs:
+      release-url: ${{ steps.create-release.outputs.html_url }}
+      release-id: ${{ steps.create-release.outputs.id }}
+      upload-url: ${{ steps.create-release.outputs.upload_url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Pull latest changes
+        run: git pull origin main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production artifacts
+        run: npm run build:prod
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          echo "📝 Generating changelog..."
+
+          VERSION="${{ needs.version-management.outputs.new-version }}"
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "No previous tag found, generating changelog from first commit"
+            COMMIT_RANGE="$(git rev-list --max-parents=0 HEAD)..HEAD"
+          else
+            echo "Previous tag: $PREVIOUS_TAG"
+            COMMIT_RANGE="$PREVIOUS_TAG..HEAD"
+          fi
+
+          echo "Analyzing commits in range: $COMMIT_RANGE"
+
+          # Generate changelog sections
+          BREAKING_CHANGES=""
+          FEATURES=""
+          FIXES=""
+          OTHER_CHANGES=""
+
+          # Process commits
+          while IFS= read -r commit; do
+            if [ -n "$commit" ]; then
+              COMMIT_MSG=$(git log --format="%s" -n 1 "$commit")
+              COMMIT_AUTHOR=$(git log --format="%an" -n 1 "$commit")
+              COMMIT_HASH=$(git log --format="%h" -n 1 "$commit")
+              
+              # Check for breaking changes
+              if echo "$COMMIT_MSG" | grep -q "BREAKING CHANGE\|!:"; then
+                BREAKING_CHANGES="$BREAKING_CHANGES\n- $COMMIT_MSG ([$COMMIT_HASH](https://github.com/${{ github.repository }}/commit/$commit))"
+              # Check for features
+              elif echo "$COMMIT_MSG" | grep -q "^feat"; then
+                FEATURES="$FEATURES\n- $COMMIT_MSG ([$COMMIT_HASH](https://github.com/${{ github.repository }}/commit/$commit))"
+              # Check for fixes
+              elif echo "$COMMIT_MSG" | grep -q "^fix"; then
+                FIXES="$FIXES\n- $COMMIT_MSG ([$COMMIT_HASH](https://github.com/${{ github.repository }}/commit/$commit))"
+              # Other changes
+              else
+                OTHER_CHANGES="$OTHER_CHANGES\n- $COMMIT_MSG ([$COMMIT_HASH](https://github.com/${{ github.repository }}/commit/$commit))"
+              fi
+            fi
+          done <<< "$(git rev-list $COMMIT_RANGE)"
+
+          # Build changelog
+          CHANGELOG="## What's Changed\n\n"
+
+          if [ -n "$BREAKING_CHANGES" ]; then
+            CHANGELOG="$CHANGELOG### 💥 Breaking Changes\n$BREAKING_CHANGES\n\n"
+          fi
+
+          if [ -n "$FEATURES" ]; then
+            CHANGELOG="$CHANGELOG### ✨ New Features\n$FEATURES\n\n"
+          fi
+
+          if [ -n "$FIXES" ]; then
+            CHANGELOG="$CHANGELOG### 🐛 Bug Fixes\n$FIXES\n\n"
+          fi
+
+          if [ -n "$OTHER_CHANGES" ]; then
+            CHANGELOG="$CHANGELOG### 🔧 Other Changes\n$OTHER_CHANGES\n\n"
+          fi
+
+          # Add package info
+          CHANGELOG="$CHANGELOG### 📦 Package Information\n\n"
+          CHANGELOG="$CHANGELOG- **NPM Package:** [@codemastersolutions/taskly@$VERSION](https://www.npmjs.com/package/@codemastersolutions/taskly/v/$VERSION)\n"
+          CHANGELOG="$CHANGELOG- **Package Size:** ${{ needs.npm-publish.outputs.package-size }}\n"
+          CHANGELOG="$CHANGELOG- **Installation:** \`npm install @codemastersolutions/taskly@$VERSION\`\n\n"
+
+          # Add verification info
+          CHANGELOG="$CHANGELOG### ✅ Verification\n\n"
+          CHANGELOG="$CHANGELOG- All tests passed ✅\n"
+          CHANGELOG="$CHANGELOG- Security audit passed ✅\n"
+          CHANGELOG="$CHANGELOG- Cross-platform compatibility verified ✅\n"
+          CHANGELOG="$CHANGELOG- Package published successfully ✅\n\n"
+
+          # Save changelog to file
+          echo -e "$CHANGELOG" > CHANGELOG_RELEASE.md
+
+          # Set output (escape newlines for GitHub Actions)
+          {
+            echo 'changelog<<EOF'
+            echo -e "$CHANGELOG"
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+          echo "✅ Changelog generated"
+
+      - name: Create build artifacts archive
+        run: |
+          echo "📦 Creating build artifacts archive..."
+
+          # Create artifacts directory
+          mkdir -p release-artifacts
+
+          # Copy build outputs
+          cp -r dist release-artifacts/
+          cp package.json release-artifacts/
+          cp README.md release-artifacts/
+          cp LICENSE release-artifacts/
+
+          # Create tarball
+          tar -czf release-artifacts.tar.gz -C release-artifacts .
+
+          # Create zip
+          cd release-artifacts
+          zip -r ../release-artifacts.zip .
+          cd ..
+
+          # Get file sizes
+          TAR_SIZE=$(ls -lh release-artifacts.tar.gz | awk '{print $5}')
+          ZIP_SIZE=$(ls -lh release-artifacts.zip | awk '{print $5}')
+
+          echo "✅ Artifacts created:"
+          echo "- Tarball: release-artifacts.tar.gz ($TAR_SIZE)"
+          echo "- Zip: release-artifacts.zip ($ZIP_SIZE)"
+
+      - name: Create GitHub Release
+        id: create-release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ needs.version-management.outputs.new-version }}
+          release_name: Release v${{ needs.version-management.outputs.new-version }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: false
+
+      - name: Upload tarball artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create-release.outputs.upload_url }}
+          asset_path: ./release-artifacts.tar.gz
+          asset_name: taskly-v${{ needs.version-management.outputs.new-version }}.tar.gz
+          asset_content_type: application/gzip
+
+      - name: Upload zip artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create-release.outputs.upload_url }}
+          asset_path: ./release-artifacts.zip
+          asset_name: taskly-v${{ needs.version-management.outputs.new-version }}.zip
+          asset_content_type: application/zip
+
+      - name: Generate release summary
+        run: |
+          echo "## 🎉 GitHub Release Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release:** [v${{ needs.version-management.outputs.new-version }}](${{ steps.create-release.outputs.html_url }})" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** \`v${{ needs.version-management.outputs.new-version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Increment Type:** ${{ needs.version-management.outputs.increment-type }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📎 Release Assets" >> $GITHUB_STEP_SUMMARY
+          echo "- \`taskly-v${{ needs.version-management.outputs.new-version }}.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`taskly-v${{ needs.version-management.outputs.new-version }}.zip\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 **[View Release](${{ steps.create-release.outputs.html_url }})**" >> $GITHUB_STEP_SUMMARY
+
+  post-publish:
+    name: Post-Publish Tasks
+    runs-on: ubuntu-latest
+    needs: [validate-secrets, version-management, npm-publish, github-release]
+    if: always() && needs.version-management.outputs.should-publish == 'true' && github.event.inputs.dry-run != 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate comprehensive publication report
+        run: |
+          echo "## 📊 Publication Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎯 Publication Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Version information
+          echo "- **Version:** \`${{ needs.version-management.outputs.current-version }}\` → \`${{ needs.version-management.outputs.new-version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Increment Type:** ${{ needs.version-management.outputs.increment-type }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Reason:** ${{ needs.version-management.outputs.reason }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Publication status
+          NPM_STATUS="${{ needs.npm-publish.result }}"
+          RELEASE_STATUS="${{ needs.github-release.result }}"
+
+          echo "### 📦 Publication Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$NPM_STATUS" = "success" ]; then
+            echo "✅ **NPM Publication:** Success" >> $GITHUB_STEP_SUMMARY
+            echo "  - Package: [@codemastersolutions/taskly@${{ needs.version-management.outputs.new-version }}](${{ needs.npm-publish.outputs.npm-url }})" >> $GITHUB_STEP_SUMMARY
+            echo "  - Size: ${{ needs.npm-publish.outputs.package-size }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **NPM Publication:** Failed ($NPM_STATUS)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "$RELEASE_STATUS" = "success" ]; then
+            echo "✅ **GitHub Release:** Success" >> $GITHUB_STEP_SUMMARY
+            echo "  - Release: [v${{ needs.version-management.outputs.new-version }}](${{ needs.github-release.outputs.release-url }})" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **GitHub Release:** Failed ($RELEASE_STATUS)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Installation instructions
+          if [ "$NPM_STATUS" = "success" ]; then
+            echo "### 🚀 Installation" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "# Install the latest version" >> $GITHUB_STEP_SUMMARY
+            echo "npm install @codemastersolutions/taskly@${{ needs.version-management.outputs.new-version }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "# Or install globally for CLI usage" >> $GITHUB_STEP_SUMMARY
+            echo "npm install -g @codemastersolutions/taskly@${{ needs.version-management.outputs.new-version }}" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Links
+          echo "### 🔗 Quick Links" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "$NPM_STATUS" = "success" ]; then
+            echo "- 📦 [NPM Package](${{ needs.npm-publish.outputs.npm-url }})" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "$RELEASE_STATUS" = "success" ]; then
+            echo "- 🏷️ [GitHub Release](${{ needs.github-release.outputs.release-url }})" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "- 📚 [Documentation](https://github.com/${{ github.repository }}#readme)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🐛 [Report Issues](https://github.com/${{ github.repository }}/issues)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Send success notification
+        if: needs.npm-publish.result == 'success' && needs.github-release.result == 'success'
+        run: |
+          echo "🎉 Publication completed successfully!"
+          echo "Package @codemastersolutions/taskly@${{ needs.version-management.outputs.new-version }} is now available"
+
+          # Here you could add webhook notifications to Slack, Discord, etc.
+          # Example webhook call (uncomment and configure as needed):
+          # curl -X POST -H 'Content-type: application/json' \
+          #   --data '{"text":"🎉 New release: @codemastersolutions/taskly@${{ needs.version-management.outputs.new-version }} is now available!"}' \
+          #   ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Send failure notification
+        if: needs.npm-publish.result == 'failure' || needs.github-release.result == 'failure'
+        run: |
+          echo "❌ Publication failed!"
+          echo "NPM Status: ${{ needs.npm-publish.result }}"
+          echo "Release Status: ${{ needs.github-release.result }}"
+
+          # Here you could add failure notifications
+          # Example webhook call (uncomment and configure as needed):
+          # curl -X POST -H 'Content-type: application/json' \
+          #   --data '{"text":"❌ Publication failed for @codemastersolutions/taskly@${{ needs.version-management.outputs.new-version }}"}' \
+          #   ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Cleanup temporary artifacts
+        run: |
+          echo "🧹 Cleaning up temporary artifacts..."
+
+          # Remove any temporary files created during the workflow
+          rm -f *.tgz *.tar.gz *.zip
+          rm -rf temp-* release-artifacts
+          rm -f CHANGELOG_RELEASE.md
+
+          echo "✅ Cleanup completed"
+
+      - name: Generate final summary
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          OVERALL_SUCCESS="true"
+          if [ "${{ needs.npm-publish.result }}" != "success" ] || [ "${{ needs.github-release.result }}" != "success" ]; then
+            OVERALL_SUCCESS="false"
+          fi
+
+          if [ "$OVERALL_SUCCESS" = "true" ]; then
+            echo "## 🎉 Publication Completed Successfully!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Version **${{ needs.version-management.outputs.new-version }}** of @codemastersolutions/taskly has been successfully published to NPM and a GitHub release has been created." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ⚠️ Publication Completed with Issues" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "There were issues during the publication process. Please check the job logs for details." >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Workflow completed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')_" >> $GITHUB_STEP_SUMMARY
+
+  summary:
+    name: Workflow Summary
+    runs-on: ubuntu-latest
+    needs:
+      [
+        validate-secrets,
+        version-management,
+        pre-publish-validation,
+        publish-matrix,
+        npm-publish,
+        github-release,
+        post-publish,
+      ]
+    if: always()
+
+    steps:
+      - name: Generate workflow summary
+        run: |
+          echo "## 📋 Auto-Publish Workflow Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Version Management Results
+          if [ "${{ needs.version-management.result }}" = "success" ]; then
+            echo "✅ **Version Management:** Success" >> $GITHUB_STEP_SUMMARY
+            echo "  - Version: ${{ needs.version-management.outputs.current-version }} → ${{ needs.version-management.outputs.new-version }}" >> $GITHUB_STEP_SUMMARY
+            echo "  - Type: ${{ needs.version-management.outputs.increment-type }}" >> $GITHUB_STEP_SUMMARY
+            echo "  - Should Publish: ${{ needs.version-management.outputs.should-publish }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Version Management:** ${{ needs.version-management.result }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Pre-publish Validation Results
+          if [ "${{ needs.pre-publish-validation.result }}" = "success" ]; then
+            echo "✅ **Pre-Publish Validation:** Success" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.pre-publish-validation.result }}" = "skipped" ]; then
+            echo "⏭️ **Pre-Publish Validation:** Skipped (no changes to publish)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Pre-Publish Validation:** ${{ needs.pre-publish-validation.result }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Matrix Tests Results
+          if [ "${{ needs.publish-matrix.result }}" = "success" ]; then
+            echo "✅ **Matrix Tests:** Success" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.publish-matrix.result }}" = "skipped" ]; then
+            echo "⏭️ **Matrix Tests:** Skipped (no changes to publish)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Matrix Tests:** ${{ needs.publish-matrix.result }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # NPM Publish Results
+          if [ "${{ needs.npm-publish.result }}" = "success" ]; then
+            echo "✅ **NPM Publish:** Success" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.npm-publish.result }}" = "skipped" ]; then
+            echo "⏭️ **NPM Publish:** Skipped (no changes to publish or dry-run mode)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **NPM Publish:** ${{ needs.npm-publish.result }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # GitHub Release Results
+          if [ "${{ needs.github-release.result }}" = "success" ]; then
+            echo "✅ **GitHub Release:** Success" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.github-release.result }}" = "skipped" ]; then
+            echo "⏭️ **GitHub Release:** Skipped (no changes to publish or dry-run mode)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **GitHub Release:** ${{ needs.github-release.result }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Post-Publish Results
+          if [ "${{ needs.post-publish.result }}" = "success" ]; then
+            echo "✅ **Post-Publish:** Success" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.post-publish.result }}" = "skipped" ]; then
+            echo "⏭️ **Post-Publish:** Skipped (no changes to publish or dry-run mode)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Post-Publish:** ${{ needs.post-publish.result }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Overall Status
+          if [ "${{ needs.version-management.outputs.should-publish }}" = "true" ]; then
+            if [ "${{ needs.pre-publish-validation.result }}" = "success" ] && [ "${{ needs.publish-matrix.result }}" = "success" ] && [ "${{ needs.npm-publish.result }}" = "success" ] && [ "${{ needs.github-release.result }}" = "success" ]; then
+              echo "🎉 **Overall Status:** Publication completed successfully!" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "⚠️ **Overall Status:** Publication completed with issues" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "ℹ️ **Overall Status:** No publishing needed" >> $GITHUB_STEP_SUMMARY
+          fi

@@ -21,7 +21,7 @@ const ANSI_COLORS: Record<Color, string> = {
   brightYellow: '\x1b[93m',
   brightBlue: '\x1b[94m',
   brightMagenta: '\x1b[95m',
-  brightCyan: '\x1b[96m'
+  brightCyan: '\x1b[96m',
 };
 
 // ANSI control codes
@@ -33,9 +33,18 @@ const ANSI_CLEAR_LINE = '\x1b[2K';
 
 // Default color cycle for automatic assignment
 export const DEFAULT_COLORS: Color[] = [
-  'blue', 'green', 'yellow', 'red', 'magenta', 'cyan',
-  'brightBlue', 'brightGreen', 'brightYellow', 'brightRed',
-  'brightMagenta', 'brightCyan'
+  'blue',
+  'green',
+  'yellow',
+  'red',
+  'magenta',
+  'cyan',
+  'brightBlue',
+  'brightGreen',
+  'brightYellow',
+  'brightRed',
+  'brightMagenta',
+  'brightCyan',
 ];
 
 /**
@@ -64,10 +73,16 @@ export function supportsColor(): boolean {
 
   // Common terminals that support color
   const colorTerms = [
-    'xterm', 'xterm-color', 'xterm-256color',
-    'screen', 'screen-256color',
-    'tmux', 'tmux-256color',
-    'rxvt', 'ansi', 'cygwin'
+    'xterm',
+    'xterm-color',
+    'xterm-256color',
+    'screen',
+    'screen-256color',
+    'tmux',
+    'tmux-256color',
+    'rxvt',
+    'ansi',
+    'cygwin',
   ];
 
   return colorTerms.some(colorTerm => term.includes(colorTerm));
@@ -93,7 +108,9 @@ export function getAnsiColorCode(color: Color | string): string {
   }
 
   // Handle RGB colors (rgb(r, g, b))
-  const rgbMatch = color.match(/^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i);
+  const rgbMatch = color.match(
+    /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i
+  );
   if (rgbMatch) {
     const r = parseInt(rgbMatch[1], 10);
     const g = parseInt(rgbMatch[2], 10);
@@ -155,17 +172,22 @@ export function getTextWidth(text: string): number {
 /**
  * Pads text to a specific width
  */
-export function padText(text: string, width: number, align: 'left' | 'right' | 'center' = 'left'): string {
+export function padText(
+  text: string,
+  width: number,
+  align: 'left' | 'right' | 'center' = 'left'
+): string {
   const textWidth = getTextWidth(text);
   const padding = Math.max(0, width - textWidth);
 
   switch (align) {
     case 'right':
       return ' '.repeat(padding) + text;
-    case 'center':
+    case 'center': {
       const leftPad = Math.floor(padding / 2);
       const rightPad = padding - leftPad;
       return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
+    }
     default:
       return text + ' '.repeat(padding);
   }
@@ -174,16 +196,20 @@ export function padText(text: string, width: number, align: 'left' | 'right' | '
 /**
  * Truncates text to a maximum width
  */
-export function truncateText(text: string, maxWidth: number, suffix: string = '...'): string {
+export function truncateText(
+  text: string,
+  maxWidth: number,
+  suffix: string = '...'
+): string {
   const textWidth = getTextWidth(text);
-  
+
   if (textWidth <= maxWidth) {
     return text;
   }
 
   const suffixWidth = getTextWidth(suffix);
   const targetWidth = maxWidth - suffixWidth;
-  
+
   if (targetWidth <= 0) {
     return suffix.substring(0, maxWidth);
   }
@@ -191,7 +217,7 @@ export function truncateText(text: string, maxWidth: number, suffix: string = '.
   // Handle ANSI codes properly when truncating
   const stripped = stripAnsi(text);
   const truncated = stripped.substring(0, targetWidth);
-  
+
   // Try to preserve color codes if the original text had them
   const hasAnsi = text !== stripped;
   if (hasAnsi) {
@@ -200,21 +226,24 @@ export function truncateText(text: string, maxWidth: number, suffix: string = '.
     const colorPrefix = colorMatch ? colorMatch[0] : '';
     return colorPrefix + truncated + suffix + ANSI_RESET;
   }
-  
+
   return truncated + suffix;
 }
 
 /**
  * Formats a timestamp
  */
-export function formatTimestamp(date: Date = new Date(), format: string = 'HH:mm:ss'): string {
-  const pad = (num: number) => num.toString().padStart(2, '0');
-  
+export function formatTimestamp(
+  date: Date = new Date(),
+  format: string = 'HH:mm:ss'
+): string {
+  const pad = (num: number): string => num.toString().padStart(2, '0');
+
   const hours = pad(date.getHours());
   const minutes = pad(date.getMinutes());
   const seconds = pad(date.getSeconds());
   const milliseconds = date.getMilliseconds().toString().padStart(3, '0');
-  
+
   return format
     .replace('HH', hours)
     .replace('mm', minutes)
@@ -226,18 +255,18 @@ export function formatTimestamp(date: Date = new Date(), format: string = 'HH:mm
  * Creates a formatted prefix for task output
  */
 export function createPrefix(
-  identifier: string, 
-  color: Color | string, 
+  identifier: string,
+  color: Color | string,
   timestamp?: Date,
   maxWidth: number = 12
 ): string {
   const coloredId = colorize(padText(identifier, maxWidth), color);
-  
+
   if (timestamp) {
     const time = dim(formatTimestamp(timestamp));
     return `${time} ${coloredId}`;
   }
-  
+
   return coloredId;
 }
 
@@ -254,7 +283,8 @@ export function formatOutputLine(
 ): OutputLine {
   const now = timestamp || new Date();
   const prefix = createPrefix(identifier, color, now, prefixWidth);
-  const separator = type === 'stderr' ? colorize('│', 'red') : colorize('│', 'gray');
+  const separator =
+    type === 'stderr' ? colorize('│', 'red') : colorize('│', 'gray');
   const formatted = `${prefix} ${separator} ${content}`;
 
   return {
@@ -262,14 +292,18 @@ export function formatOutputLine(
     content,
     type,
     timestamp: now.getTime(),
-    formatted
+    formatted,
   };
 }
 
 /**
  * Creates a separator line
  */
-export function createSeparator(width: number = 80, char: string = '─', color?: Color | string): string {
+export function createSeparator(
+  width: number = 80,
+  char: string = '─',
+  color?: Color | string
+): string {
   const line = char.repeat(width);
   return color ? colorize(line, color) : dim(line);
 }
@@ -277,19 +311,23 @@ export function createSeparator(width: number = 80, char: string = '─', color?
 /**
  * Creates a header with title
  */
-export function createHeader(title: string, width: number = 80, color: Color | string = 'blue'): string {
+export function createHeader(
+  title: string,
+  width: number = 80,
+  color: Color | string = 'blue'
+): string {
   const titleWidth = getTextWidth(title);
   const padding = Math.max(0, width - titleWidth - 4); // 4 for spaces and borders
   const leftPad = Math.floor(padding / 2);
   const rightPad = padding - leftPad;
-  
+
   const line = '─'.repeat(width);
   const header = `  ${' '.repeat(leftPad)}${title}${' '.repeat(rightPad)}  `;
-  
+
   return [
     colorize(line, color),
     colorize(header, color),
-    colorize(line, color)
+    colorize(line, color),
   ].join('\n');
 }
 
@@ -319,11 +357,11 @@ export function createProgressIndicator(
   const percentage = Math.min(100, Math.max(0, (current / total) * 100));
   const filled = Math.floor((percentage / 100) * width);
   const empty = width - filled;
-  
+
   const bar = '█'.repeat(filled) + '░'.repeat(empty);
   const coloredBar = colorize(bar, color);
   const percentText = `${percentage.toFixed(1)}%`;
-  
+
   return `${coloredBar} ${percentText}`;
 }
 
@@ -340,19 +378,21 @@ export function processStreamData(
   const text = data.toString();
   const lines = text.split(/\r?\n/);
   const outputLines: OutputLine[] = [];
-  
+
   // Process each line (except the last one if it's empty, as it's usually just the newline)
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    
+
     // Skip empty lines at the end
     if (i === lines.length - 1 && line === '') {
       continue;
     }
-    
-    outputLines.push(formatOutputLine(line, identifier, color, type, undefined, prefixWidth));
+
+    outputLines.push(
+      formatOutputLine(line, identifier, color, type, undefined, prefixWidth)
+    );
   }
-  
+
   return outputLines;
 }
 
@@ -361,15 +401,15 @@ export function processStreamData(
  */
 export function mergeOutputStreams(streams: OutputLine[][]): OutputLine[] {
   const merged: OutputLine[] = [];
-  
+
   // Flatten all streams
   for (const stream of streams) {
     merged.push(...stream);
   }
-  
+
   // Sort by timestamp to maintain chronological order
   merged.sort((a, b) => a.timestamp - b.timestamp);
-  
+
   return merged;
 }
 

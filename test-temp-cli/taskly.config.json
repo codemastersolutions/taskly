@@ -1,0 +1,11 @@
+{
+  "packageManager": "yarn",
+  "killOthersOnFail": true,
+  "maxConcurrency": 2,
+  "tasks": {
+    "test": {
+      "command": "echo \"test task\"",
+      "identifier": "testing"
+    }
+  }
+}

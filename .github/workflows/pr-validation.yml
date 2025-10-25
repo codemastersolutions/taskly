@@ -1,0 +1,621 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# Minimal required permissions for PR validation
+permissions:
+  contents: read # Read repository contents
+  pull-requests: write # Comment on PRs and update status
+  checks: write # Update status checks
+  actions: read # Read workflow information
+
+# Ensure only one workflow runs at a time per PR
+concurrency:
+  group: pr-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '18.x'
+  MIN_COVERAGE: 80
+  MAX_BUNDLE_SIZE_KB: 50
+
+jobs:
+  load-security-config:
+    name: Load Security Configuration
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    outputs:
+      critical-threshold: ${{ steps.config.outputs.critical-threshold }}
+      high-threshold: ${{ steps.config.outputs.high-threshold }}
+      moderate-threshold: ${{ steps.config.outputs.moderate-threshold }}
+      audit-level: ${{ steps.config.outputs.audit-level }}
+      fail-on-vulnerabilities: ${{ steps.config.outputs.fail-on-vulnerabilities }}
+      check-licenses: ${{ steps.config.outputs.check-licenses }}
+      allowed-licenses: ${{ steps.config.outputs.allowed-licenses }}
+      check-secrets: ${{ steps.config.outputs.check-secrets }}
+      secrets-patterns: ${{ steps.config.outputs.secrets-patterns }}
+      check-outdated: ${{ steps.config.outputs.check-outdated }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Load security configuration
+        id: config
+        uses: ./.github/actions/load-security-config
+
+  quality-gates:
+    name: Quality Gates
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    outputs:
+      lint-result: ${{ steps.quality.outputs.lint-result }}
+      format-result: ${{ steps.quality.outputs.format-result }}
+      typecheck-result: ${{ steps.quality.outputs.typecheck-result }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Setup Node.js with cache
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run quality checks
+        id: quality
+        uses: ./.github/actions/quality-check
+        with:
+          fail-on-warnings: true
+
+      - name: Generate quality report
+        run: |
+          echo "## 📊 Quality Gates Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status | Details |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|---------|" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.quality.outputs.lint-result }}" = "success" ]; then
+            echo "| ESLint | ✅ Passed | No linting errors found |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| ESLint | ❌ Failed | Linting errors detected |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ steps.quality.outputs.format-result }}" = "success" ]; then
+            echo "| Prettier | ✅ Passed | Code formatting is correct |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Prettier | ❌ Failed | Code formatting issues found |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ steps.quality.outputs.typecheck-result }}" = "success" ]; then
+            echo "| TypeScript | ✅ Passed | No type errors found |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| TypeScript | ❌ Failed | Type errors detected |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    needs: load-security-config
+    if: github.event.pull_request.draft == false
+
+    outputs:
+      vulnerabilities-found: ${{ steps.security.outputs.vulnerabilities-found }}
+      audit-result: ${{ steps.security.outputs.audit-result }}
+      outdated-count: ${{ steps.security.outputs.outdated-count }}
+      license-issues: ${{ steps.security.outputs.license-issues }}
+      secrets-found: ${{ steps.security.outputs.secrets-found }}
+      security-score: ${{ steps.security.outputs.security-score }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node.js with cache
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run security audit
+        id: security
+        uses: ./.github/actions/security-audit
+        with:
+          audit-level: ${{ needs.load-security-config.outputs.audit-level }}
+          fail-on-vulnerabilities: ${{ needs.load-security-config.outputs.fail-on-vulnerabilities }}
+          critical-threshold: ${{ needs.load-security-config.outputs.critical-threshold }}
+          high-threshold: ${{ needs.load-security-config.outputs.high-threshold }}
+          moderate-threshold: ${{ needs.load-security-config.outputs.moderate-threshold }}
+          check-outdated: ${{ needs.load-security-config.outputs.check-outdated }}
+          check-licenses: ${{ needs.load-security-config.outputs.check-licenses }}
+          allowed-licenses: ${{ needs.load-security-config.outputs.allowed-licenses }}
+          check-secrets: ${{ needs.load-security-config.outputs.check-secrets }}
+          secrets-patterns: ${{ needs.load-security-config.outputs.secrets-patterns }}
+          generate-report: true
+
+      - name: Check for critical vulnerabilities
+        run: |
+          echo "## 🔒 Security Audit Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          VULN_COUNT="${{ steps.security.outputs.vulnerabilities-found }}"
+          OUTDATED_COUNT="${{ steps.security.outputs.outdated-count }}"
+
+          if [ "${{ steps.security.outputs.audit-result }}" = "success" ]; then
+            echo "✅ **No security vulnerabilities found**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **$VULN_COUNT vulnerabilities found at ${{ env.SECURITY_AUDIT_LEVEL }} level or above**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ **This PR is blocked until security issues are resolved**" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          if [ "$OUTDATED_COUNT" != "0" ] && [ "$OUTDATED_COUNT" != "unknown" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ **$OUTDATED_COUNT outdated dependencies found**" >> $GITHUB_STEP_SUMMARY
+            echo "Consider updating dependencies for better security" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  test-matrix:
+    name: Test Matrix
+    runs-on: ${{ matrix.os }}
+    needs: load-security-config
+    if: github.event.pull_request.draft == false
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['16.x', '18.x', '20.x']
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    outputs:
+      coverage-result: ${{ steps.coverage.outputs.result }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node.js with cache
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Run test suite
+        run: npm run test:ci
+
+      - name: Check coverage threshold
+        id: coverage
+        if: matrix.node-version == '18.x' && matrix.os == 'ubuntu-latest'
+        run: |
+          echo "Checking coverage threshold..."
+
+          if [ -f "coverage/coverage-summary.json" ]; then
+            node -e "
+              const coverage = JSON.parse(require('fs').readFileSync('coverage/coverage-summary.json', 'utf8'));
+              const total = coverage.total;
+              
+              const statements = total.statements.pct;
+              const branches = total.branches.pct;
+              const functions = total.functions.pct;
+              const lines = total.lines.pct;
+              
+              const minCoverage = ${{ env.MIN_COVERAGE }};
+              
+              console.log('Coverage Results:');
+              console.log('- Statements:', statements.toFixed(2) + '%');
+              console.log('- Branches:', branches.toFixed(2) + '%');
+              console.log('- Functions:', functions.toFixed(2) + '%');
+              console.log('- Lines:', lines.toFixed(2) + '%');
+              
+              if (statements >= minCoverage && branches >= minCoverage && 
+                  functions >= minCoverage && lines >= minCoverage) {
+                console.log('✅ Coverage requirements met!');
+                process.exit(0);
+              } else {
+                console.log('❌ Coverage requirements not met! Minimum required: ' + minCoverage + '%');
+                process.exit(1);
+              }
+            "
+            echo "result=success" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Coverage report not found"
+            echo "result=failure" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.node-version }}-${{ matrix.os }}
+          path: |
+            coverage/
+            !coverage/tmp/
+          retention-days: 7
+
+      - name: Generate coverage report
+        if: matrix.node-version == '18.x' && matrix.os == 'ubuntu-latest'
+        run: |
+          echo "## 🧪 Test Coverage Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f "coverage/coverage-summary.json" ]; then
+            node -e "
+              const coverage = JSON.parse(require('fs').readFileSync('coverage/coverage-summary.json', 'utf8'));
+              const total = coverage.total;
+              
+              console.log('| Metric | Coverage | Threshold | Status |');
+              console.log('|--------|----------|-----------|--------|');
+              
+              const minCoverage = ${{ env.MIN_COVERAGE }};
+              
+              const checkCoverage = (metric, value) => {
+                const status = value >= minCoverage ? '✅ Pass' : '❌ Fail';
+                console.log('| ' + metric + ' | ' + value.toFixed(2) + '% | ' + minCoverage + '% | ' + status + ' |');
+                return value >= minCoverage;
+              };
+              
+              const statementsPass = checkCoverage('Statements', total.statements.pct);
+              const branchesPass = checkCoverage('Branches', total.branches.pct);
+              const functionsPass = checkCoverage('Functions', total.functions.pct);
+              const linesPass = checkCoverage('Lines', total.lines.pct);
+              
+              console.log('');
+              if (statementsPass && branchesPass && functionsPass && linesPass) {
+                console.log('✅ **All coverage requirements met!**');
+              } else {
+                console.log('❌ **Coverage requirements not met!**');
+              }
+            " >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Coverage report not found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload coverage to Codecov
+        if: matrix.node-version == '18.x' && matrix.os == 'ubuntu-latest' && github.event_name == 'pull_request'
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+  build-validation:
+    name: Build Validation
+    runs-on: ubuntu-latest
+    needs: load-security-config
+    if: github.event.pull_request.draft == false
+
+    outputs:
+      build-result: ${{ steps.build.outputs.result }}
+      bundle-size-result: ${{ steps.bundle-size.outputs.result }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node.js with cache
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Build production bundles
+        id: build
+        run: |
+          echo "Building production bundles..."
+
+          if npm run build:prod; then
+            echo "✅ Production build successful"
+            echo "result=success" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Production build failed"
+            echo "result=failure" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Validate entry points
+        run: |
+          echo "Validating entry points..."
+
+          # Check that all declared entry points exist
+          ENTRY_POINTS=(
+            "dist/cjs/index.js"
+            "dist/esm/index.js"
+            "dist/types/index.d.ts"
+            "dist/cjs/bin/taskly.js"
+          )
+
+          for entry in "${ENTRY_POINTS[@]}"; do
+            if [ -f "$entry" ]; then
+              echo "✅ $entry exists"
+            else
+              echo "❌ $entry missing"
+              exit 1
+            fi
+          done
+
+      - name: Test bundle functionality
+        run: |
+          echo "Testing bundle functionality..."
+
+          # Test CommonJS import
+          if node -e "const taskly = require('./dist/cjs/index.js'); console.log('CommonJS import successful')"; then
+            echo "✅ CommonJS bundle functional"
+          else
+            echo "❌ CommonJS bundle not functional"
+            exit 1
+          fi
+
+          # Test ESM import
+          if node -e "import('./dist/esm/index.js').then(() => console.log('ESM import successful'))"; then
+            echo "✅ ESM bundle functional"
+          else
+            echo "❌ ESM bundle not functional"
+            exit 1
+          fi
+
+          # Test CLI executable
+          if node dist/cjs/bin/taskly.js --version; then
+            echo "✅ CLI executable functional"
+          else
+            echo "❌ CLI executable not functional"
+            exit 1
+          fi
+
+      - name: Check bundle size
+        id: bundle-size
+        run: |
+          echo "Checking bundle sizes..."
+
+          # Calculate bundle sizes in bytes
+          CJS_SIZE=$(stat -c%s dist/cjs/index.js 2>/dev/null || stat -f%z dist/cjs/index.js)
+          ESM_SIZE=$(stat -c%s dist/esm/index.js 2>/dev/null || stat -f%z dist/esm/index.js)
+
+          # Convert to KB
+          CJS_KB=$((CJS_SIZE / 1024))
+          ESM_KB=$((ESM_SIZE / 1024))
+
+          MAX_SIZE_KB=${{ env.MAX_BUNDLE_SIZE_KB }}
+
+          echo "Bundle sizes:"
+          echo "- CommonJS: ${CJS_KB}KB"
+          echo "- ESM: ${ESM_KB}KB"
+          echo "- Maximum allowed: ${MAX_SIZE_KB}KB"
+
+          # Generate bundle size report
+          echo "## 📦 Bundle Size Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Format | Size | Limit | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|------|-------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          if [ $CJS_KB -le $MAX_SIZE_KB ]; then
+            echo "| CommonJS | ${CJS_KB}KB | ${MAX_SIZE_KB}KB | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
+            CJS_OK=true
+          else
+            echo "| CommonJS | ${CJS_KB}KB | ${MAX_SIZE_KB}KB | ❌ Fail |" >> $GITHUB_STEP_SUMMARY
+            CJS_OK=false
+          fi
+
+          if [ $ESM_KB -le $MAX_SIZE_KB ]; then
+            echo "| ESM | ${ESM_KB}KB | ${MAX_SIZE_KB}KB | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
+            ESM_OK=true
+          else
+            echo "| ESM | ${ESM_KB}KB | ${MAX_SIZE_KB}KB | ❌ Fail |" >> $GITHUB_STEP_SUMMARY
+            ESM_OK=false
+          fi
+
+          # Add gzipped sizes
+          CJS_GZIP=$(gzip -c dist/cjs/index.js | wc -c)
+          ESM_GZIP=$(gzip -c dist/esm/index.js | wc -c)
+          CJS_GZIP_KB=$((CJS_GZIP / 1024))
+          ESM_GZIP_KB=$((ESM_GZIP / 1024))
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Compressed Sizes (gzip)" >> $GITHUB_STEP_SUMMARY
+          echo "- CommonJS: ${CJS_GZIP_KB}KB" >> $GITHUB_STEP_SUMMARY
+          echo "- ESM: ${ESM_GZIP_KB}KB" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$CJS_OK" = true ] && [ "$ESM_OK" = true ]; then
+            echo "result=success" >> $GITHUB_OUTPUT
+          else
+            echo "result=failure" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ **Bundle size limits exceeded!**" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-${{ github.run_number }}
+          path: |
+            dist/
+          retention-days: 7
+
+  pr-summary:
+    name: PR Summary
+    runs-on: ubuntu-latest
+    needs:
+      [
+        load-security-config,
+        quality-gates,
+        security-audit,
+        test-matrix,
+        build-validation,
+      ]
+    if: always() && github.event.pull_request.draft == false
+
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Generate PR summary
+        run: |
+          echo "## 🚀 PR Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Validation completed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')_" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Job status summary
+          echo "### 📊 Validation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status | Details |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|---------|" >> $GITHUB_STEP_SUMMARY
+
+          # Quality Gates
+          if [ "${{ needs.quality-gates.result }}" = "success" ]; then
+            echo "| Quality Gates | ✅ Passed | Code standards met |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Quality Gates | ❌ Failed | Code quality issues found |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Security Audit
+          if [ "${{ needs.security-audit.result }}" = "success" ]; then
+            echo "| Security Audit | ✅ Passed | No vulnerabilities found |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Security Audit | ❌ Failed | Security issues detected |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Test Matrix
+          if [ "${{ needs.test-matrix.result }}" = "success" ]; then
+            echo "| Test Matrix | ✅ Passed | All tests passing |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Test Matrix | ❌ Failed | Test failures detected |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Build Validation
+          if [ "${{ needs.build-validation.result }}" = "success" ]; then
+            echo "| Build Validation | ✅ Passed | Build successful |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Build Validation | ❌ Failed | Build issues found |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Overall status
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.quality-gates.result }}" = "success" ] && \
+             [ "${{ needs.security-audit.result }}" = "success" ] && \
+             [ "${{ needs.test-matrix.result }}" = "success" ] && \
+             [ "${{ needs.build-validation.result }}" = "success" ]; then
+            echo "### 🎉 All Checks Passed!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "This PR is ready for review and can be safely merged." >> $GITHUB_STEP_SUMMARY
+            OVERALL_STATUS="✅ Ready for merge"
+          else
+            echo "### ❌ Validation Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "This PR has failing checks that must be addressed before merging." >> $GITHUB_STEP_SUMMARY
+            OVERALL_STATUS="❌ Needs fixes"
+          fi
+
+          # Create PR comment body
+          cat > pr-comment.md << 'EOF'
+          ## 🤖 PR Validation Report
+
+          **Overall Status:** $OVERALL_STATUS
+
+          ### Validation Results
+
+          | Check | Status | Details |
+          |-------|--------|---------|
+          EOF
+
+          # Add results to comment
+          if [ "${{ needs.quality-gates.result }}" = "success" ]; then
+            echo "| 📊 Quality Gates | ✅ Passed | Lint, format, and type checks passed |" >> pr-comment.md
+          else
+            echo "| 📊 Quality Gates | ❌ Failed | Code quality issues found |" >> pr-comment.md
+          fi
+
+          if [ "${{ needs.security-audit.result }}" = "success" ]; then
+            echo "| 🔒 Security Audit | ✅ Passed | No security vulnerabilities |" >> pr-comment.md
+          else
+            echo "| 🔒 Security Audit | ❌ Failed | ${{ needs.security-audit.outputs.vulnerabilities-found }} vulnerabilities found |" >> pr-comment.md
+          fi
+
+          if [ "${{ needs.test-matrix.result }}" = "success" ]; then
+            echo "| 🧪 Test Matrix | ✅ Passed | All tests passing across Node.js versions |" >> pr-comment.md
+          else
+            echo "| 🧪 Test Matrix | ❌ Failed | Test failures or coverage below ${{ env.MIN_COVERAGE }}% |" >> pr-comment.md
+          fi
+
+          if [ "${{ needs.build-validation.result }}" = "success" ]; then
+            echo "| 📦 Build Validation | ✅ Passed | Production build successful |" >> pr-comment.md
+          else
+            echo "| 📦 Build Validation | ❌ Failed | Build errors or bundle size exceeded |" >> pr-comment.md
+          fi
+
+          echo "" >> pr-comment.md
+          echo "_Validation completed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')_" >> pr-comment.md
+          echo "" >> pr-comment.md
+          echo "View detailed results in the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})." >> pr-comment.md
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const commentBody = fs.readFileSync('pr-comment.md', 'utf8');
+
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('🤖 PR Validation Report')
+            );
+
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: commentBody
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: commentBody
+              });
+            }
+
+      - name: Set PR status
+        if: always()
+        run: |
+          if [ "${{ needs.quality-gates.result }}" = "success" ] && \
+             [ "${{ needs.security-audit.result }}" = "success" ] && \
+             [ "${{ needs.test-matrix.result }}" = "success" ] && \
+             [ "${{ needs.build-validation.result }}" = "success" ]; then
+            echo "✅ All validation checks passed - PR is ready for merge"
+            exit 0
+          else
+            echo "❌ Some validation checks failed - PR needs attention"
+            exit 1
+          fi
