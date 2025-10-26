@@ -1,5 +1,6 @@
 import { ChildProcess, spawn } from 'child_process';
 import { EventEmitter } from 'events';
+import { Readable } from 'stream';
 import { handleGlobalError } from '../errors/global-handler.js';
 import {
   ERROR_CODES,
@@ -51,7 +52,7 @@ export class ProcessManager extends EventEmitter {
    * Spawn a new process for the given task
    */
   spawn(task: TaskConfig, options?: ProcessOptions): ProcessInfo {
-    const identifier = task.identifier || this.generateIdentifier(task.command);
+    const identifier = task.identifier ?? this.generateIdentifier(task.command);
     const processOptions = { ...this.defaultOptions, ...options };
 
     try {
@@ -80,7 +81,7 @@ export class ProcessManager extends EventEmitter {
 
       // Spawn the child process with security constraints
       const childProcess = spawn(command, args, {
-        cwd: processOptions.cwd || task.cwd || process.cwd(),
+        cwd: processOptions.cwd ?? task.cwd ?? process.cwd(),
         stdio: ['ignore', 'pipe', 'pipe'],
         shell: true,
         env,
@@ -120,7 +121,7 @@ export class ProcessManager extends EventEmitter {
         task.command,
         {
           taskId: identifier,
-          cwd: processOptions.cwd || task.cwd,
+          cwd: processOptions.cwd ?? task.cwd,
           packageManager: task.packageManager,
           timestamp: Date.now(),
         }
@@ -162,7 +163,7 @@ export class ProcessManager extends EventEmitter {
         // Create a termination result immediately if the process was killed
         const endTime = Date.now();
         const duration = endTime - processInfo.startTime;
-        const outputBuffer = this.outputBuffers.get(identifier) || [];
+        const outputBuffer = this.outputBuffers.get(identifier) ?? [];
 
         const exitCode = signal === 'SIGKILL' ? 137 : 130; // Standard signal exit codes
 
@@ -248,7 +249,7 @@ export class ProcessManager extends EventEmitter {
    * Get captured output for a process
    */
   getOutput(identifier: string): string[] {
-    return this.outputBuffers.get(identifier) || [];
+    return this.outputBuffers.get(identifier) ?? [];
   }
 
   /**
@@ -259,8 +260,8 @@ export class ProcessManager extends EventEmitter {
     args: string[];
   } {
     // Simple command parsing - split by spaces but respect quotes
-    const parts = commandString.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
-    const command = parts[0] || '';
+    const parts = commandString.match(/(?:[^\s"]+|"[^"]*")+/g) ?? [];
+    const command = parts[0] ?? '';
     const args = parts.slice(1).map(arg => arg.replace(/^"(.*)"$/, '$1'));
 
     return { command, args };
@@ -282,7 +283,10 @@ export class ProcessManager extends EventEmitter {
     identifier: string,
     childProcess: ChildProcess
   ): void {
-    const outputBuffer = this.outputBuffers.get(identifier)!;
+    const outputBuffer = this.outputBuffers.get(identifier);
+    if (!outputBuffer) {
+      throw new Error(`Output buffer not found for identifier: ${identifier}`);
+    }
 
     // Line buffers for handling partial lines
     let stdoutBuffer = '';
@@ -296,7 +300,7 @@ export class ProcessManager extends EventEmitter {
         const lines = stdoutBuffer.split('\n');
 
         // Keep the last incomplete line in buffer
-        stdoutBuffer = lines.pop() || '';
+        stdoutBuffer = lines.pop() ?? '';
 
         // Process complete lines
         lines.forEach(line => {
@@ -328,7 +332,7 @@ export class ProcessManager extends EventEmitter {
         const lines = stderrBuffer.split('\n');
 
         // Keep the last incomplete line in buffer
-        stderrBuffer = lines.pop() || '';
+        stderrBuffer = lines.pop() ?? '';
 
         // Process complete lines
         lines.forEach(line => {
@@ -402,7 +406,7 @@ export class ProcessManager extends EventEmitter {
    * Get formatted output for a process
    */
   getFormattedOutput(identifier: string): string[] {
-    const rawOutput = this.outputBuffers.get(identifier) || [];
+    const rawOutput = this.outputBuffers.get(identifier) ?? [];
     return rawOutput.map(line =>
       this.formatOutputLine(identifier, line, 'stdout')
     );
@@ -433,8 +437,6 @@ export class ProcessManager extends EventEmitter {
    * Get real-time output stream for a process
    */
   getOutputStream(identifier: string): NodeJS.ReadableStream {
-    const { Readable } = require('stream');
-
     const outputStream = new Readable({
       objectMode: false,
       read(): void {}, // No-op, we'll push data as it comes
@@ -473,8 +475,14 @@ export class ProcessManager extends EventEmitter {
     identifier: string,
     childProcess: ChildProcess
   ): void {
-    const processInfo = this.processInfo.get(identifier)!;
-    const outputBuffer = this.outputBuffers.get(identifier)!;
+    const processInfo = this.processInfo.get(identifier);
+    const outputBuffer = this.outputBuffers.get(identifier);
+
+    if (!processInfo || !outputBuffer) {
+      throw new Error(
+        `Process info or output buffer not found for identifier: ${identifier}`
+      );
+    }
 
     childProcess.on(
       'close',
@@ -499,7 +507,7 @@ export class ProcessManager extends EventEmitter {
         // Create task result
         const result: TaskResult = {
           identifier,
-          exitCode: code || 0,
+          exitCode: code ?? 0,
           output: [...outputBuffer],
           duration,
           startTime: processInfo.startTime,
@@ -619,7 +627,7 @@ export class ProcessManager extends EventEmitter {
               // Create a timeout result immediately
               const endTime = Date.now();
               const duration = endTime - processInfo.startTime;
-              const outputBuffer = this.outputBuffers.get(identifier) || [];
+              const outputBuffer = this.outputBuffers.get(identifier) ?? [];
 
               const result: TaskResult = {
                 identifier,
@@ -680,7 +688,9 @@ export class ProcessManager extends EventEmitter {
     }
 
     const monitorId = setInterval(() => {
-      void this.checkResourceUsage(identifier, childProcess.pid!, options);
+      if (childProcess.pid) {
+        void this.checkResourceUsage(identifier, childProcess.pid, options);
+      }
     }, 1000); // Check every second
 
     this.resourceMonitors.set(identifier, monitorId);
@@ -732,7 +742,7 @@ export class ProcessManager extends EventEmitter {
       return;
     }
 
-    const cleanup = (signal: string) => {
+    const cleanup = (signal: string): void => {
       this.emit('cleanup-signal', signal);
       this.cleanup();
       process.exit(0);

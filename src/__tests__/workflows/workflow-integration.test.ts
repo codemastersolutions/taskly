@@ -9,6 +9,30 @@ import {
   type WorkflowTestConfig,
 } from './test-config.js';
 
+// Type definitions for workflow helpers
+type WorkflowStep = {
+  name: string;
+  command: string;
+  success: boolean;
+  duration: number;
+  output?: string;
+  error?: string;
+};
+
+type WorkflowJobResult = {
+  name: string;
+  success: boolean;
+  duration: number;
+  steps: WorkflowStep[];
+};
+
+type WorkflowResult = {
+  name: string;
+  success: boolean;
+  duration: number;
+  jobs: WorkflowJobResult[];
+};
+
 describe('Workflow Integration Tests', () => {
   let testConfig: WorkflowTestConfig;
   let githubMocks: ReturnType<typeof createGitHubActionsMocks>;
@@ -66,10 +90,10 @@ describe('Workflow Integration Tests', () => {
         { name: 'Build', command: 'npm run build' },
       ];
 
-      const result = await workflowHelpers.executeJob(
+      const result = (await workflowHelpers.executeJob(
         'pr-validation',
         prValidationSteps
-      );
+      )) as WorkflowJobResult;
 
       expect(result.success).toBe(true);
       expect(result.steps).toHaveLength(9);
@@ -86,10 +110,10 @@ describe('Workflow Integration Tests', () => {
         { name: 'Run Tests', command: 'npm test' }, // This won't run due to failure
       ];
 
-      const result = await workflowHelpers.executeJob(
+      const result = (await workflowHelpers.executeJob(
         'pr-validation',
         prValidationSteps
-      );
+      )) as WorkflowJobResult;
 
       expect(result.success).toBe(false);
       expect(result.steps).toHaveLength(4); // Should stop at ESLint failure
@@ -105,7 +129,9 @@ describe('Workflow Integration Tests', () => {
         'macos-latest',
       ];
 
-      const matrixResults = [];
+      const matrixResults: Array<
+        { nodeVersion: string; os: string } & WorkflowJobResult
+      > = [];
 
       for (const nodeVersion of nodeVersions) {
         for (const os of operatingSystems) {
@@ -118,10 +144,10 @@ describe('Workflow Integration Tests', () => {
             { name: 'Run Tests', command: 'npm test' },
           ];
 
-          const result = await workflowHelpers.executeJob(
+          const result = (await workflowHelpers.executeJob(
             `test-${nodeVersion}-${os}`,
             steps
-          );
+          )) as WorkflowJobResult;
           matrixResults.push({ nodeVersion, os, ...result });
         }
       }
@@ -176,10 +202,10 @@ describe('Workflow Integration Tests', () => {
         },
       ];
 
-      const result = await workflowHelpers.executeWorkflow(
+      const result = (await workflowHelpers.executeWorkflow(
         'auto-publish',
         autoPublishJobs
-      );
+      )) as WorkflowResult;
 
       expect(result.success).toBe(true);
       expect(result.jobs).toHaveLength(4);
@@ -196,10 +222,10 @@ describe('Workflow Integration Tests', () => {
         },
       ];
 
-      const result = await workflowHelpers.executeJob(
+      const result = (await workflowHelpers.executeJob(
         'version-management',
         versionManagementSteps
-      );
+      )) as WorkflowJobResult;
 
       expect(result.success).toBe(false);
       expect(result.steps[1].success).toBe(false);
@@ -212,10 +238,10 @@ describe('Workflow Integration Tests', () => {
         { name: 'Publish to NPM', command: 'npm publish', shouldFail: true },
       ];
 
-      const result = await workflowHelpers.executeJob(
+      const result = (await workflowHelpers.executeJob(
         'npm-publish',
         publishSteps
-      );
+      )) as WorkflowJobResult;
 
       expect(result.success).toBe(false);
       expect(result.steps[1].success).toBe(false);
@@ -269,7 +295,15 @@ describe('Workflow Integration Tests', () => {
         'random commit message', // non-conventional
       ];
 
-      const analyzeCommits = (commitMessages: string[]) => {
+      const analyzeCommits = (
+        commitMessages: string[]
+      ): {
+        hasBreakingChanges: boolean;
+        hasFeatures: boolean;
+        hasFixes: boolean;
+        conventionalCommits: unknown[];
+        skippedCommits: string[];
+      } => {
         const conventionalPattern =
           /^(feat|fix|docs|style|refactor|test|chore)(\(.+\))?(!)?:\s*(.+)$/;
 
@@ -277,7 +311,7 @@ describe('Workflow Integration Tests', () => {
           hasBreakingChanges: false,
           hasFeatures: false,
           hasFixes: false,
-          conventionalCommits: [] as any[],
+          conventionalCommits: [] as unknown[],
           skippedCommits: [] as string[],
         };
 
@@ -317,7 +351,12 @@ describe('Workflow Integration Tests', () => {
     });
 
     it('should determine correct version increment', () => {
-      const determineVersionIncrement = (analysis: any) => {
+      const determineVersionIncrement = (analysis: {
+        hasBreakingChanges?: boolean;
+        hasFeatures?: boolean;
+        hasFixes?: boolean;
+        conventionalCommits: unknown[];
+      }): string => {
         if (analysis.hasBreakingChanges) return 'major';
         if (analysis.hasFeatures) return 'minor';
         if (analysis.hasFixes) return 'patch';
@@ -353,14 +392,14 @@ describe('Workflow Integration Tests', () => {
       ];
 
       testCases.forEach(testCase => {
+        const { expected, ...testCaseWithoutExpected } = testCase;
         const analysis = {
-          ...testCase,
+          ...testCaseWithoutExpected,
           conventionalCommits: [{}], // At least one conventional commit
         };
-        delete analysis.expected;
 
         const increment = determineVersionIncrement(analysis);
-        expect(increment).toBe(testCase.expected);
+        expect(increment).toBe(expected);
       });
     });
 
@@ -368,7 +407,7 @@ describe('Workflow Integration Tests', () => {
       const incrementVersion = (
         version: string,
         type: 'major' | 'minor' | 'patch'
-      ) => {
+      ): string => {
         const [major, minor, patch] = version.split('.').map(Number);
 
         switch (type) {
@@ -396,10 +435,10 @@ describe('Workflow Integration Tests', () => {
         { name: 'Dependency Analysis', command: 'npm run analyze-deps' },
       ];
 
-      const result = await workflowHelpers.executeJob(
+      const result = (await workflowHelpers.executeJob(
         'security-audit',
         securitySteps
-      );
+      )) as WorkflowJobResult;
 
       expect(result.success).toBe(true);
       expect(result.steps.every(step => step.success)).toBe(true);
@@ -413,10 +452,10 @@ describe('Workflow Integration Tests', () => {
         { name: 'Test Coverage', command: 'npm run test:coverage' },
       ];
 
-      const result = await workflowHelpers.executeJob(
+      const result = (await workflowHelpers.executeJob(
         'quality-gates',
         qualitySteps
-      );
+      )) as WorkflowJobResult;
 
       expect(result.success).toBe(true);
       expect(result.steps).toHaveLength(4);
@@ -431,10 +470,10 @@ describe('Workflow Integration Tests', () => {
         },
       ];
 
-      const result = await workflowHelpers.executeJob(
+      const result = (await workflowHelpers.executeJob(
         'security-audit',
         securitySteps
-      );
+      )) as WorkflowJobResult;
 
       expect(result.success).toBe(false);
       expect(result.steps[0].error).toContain('failed');
@@ -449,10 +488,10 @@ describe('Workflow Integration Tests', () => {
         { name: 'Slow Step', command: 'npm run build' },
       ];
 
-      const result = await workflowHelpers.executeJob(
+      const result = (await workflowHelpers.executeJob(
         'performance-test',
         steps
-      );
+      )) as WorkflowJobResult;
 
       expect(result.duration).toBeGreaterThan(0);
       expect(result.steps.every(step => step.duration >= 0)).toBe(true);

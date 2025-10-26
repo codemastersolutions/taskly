@@ -498,7 +498,7 @@ export class TasklyCLI {
     });
 
     // Process cleanup signals
-    const cleanup = (signal: string) => {
+    const cleanup = (signal: string): void => {
       // eslint-disable-next-line no-console -- CLI signal handling message
       console.log(`\n🛑 Received ${signal}, stopping tasks...`);
       taskRunner.stop(signal as NodeJS.Signals);

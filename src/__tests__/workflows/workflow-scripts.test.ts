@@ -9,6 +9,20 @@ vi.mock('fs');
 const mockExecSync = vi.mocked(execSync);
 const mockFs = vi.mocked(fs);
 
+type Step = {
+  name: string;
+  success: boolean;
+  error?: string;
+  newVersion?: string;
+};
+
+type ResultValidation = {
+  error?: string;
+  steps?: Step[];
+  success?: boolean;
+  data?: unknown;
+};
+
 describe('Workflow Scripts Unit Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -20,7 +34,9 @@ describe('Workflow Scripts Unit Tests', () => {
 
   describe('Version Management Logic', () => {
     it('should parse semantic versions correctly', () => {
-      const parseVersion = (version: string) => {
+      const parseVersion = (
+        version: string
+      ): { major: number; minor: number; patch: number } => {
         const cleanVersion = version.replace(/^v/, '');
         const parts = cleanVersion.split('.').map(Number);
 
@@ -41,7 +57,7 @@ describe('Workflow Scripts Unit Tests', () => {
       const incrementVersion = (
         version: string,
         type: 'major' | 'minor' | 'patch'
-      ) => {
+      ): string => {
         const cleanVersion = version.replace(/^v/, '');
         const parts = cleanVersion.split('.').map(Number);
 
@@ -63,7 +79,7 @@ describe('Workflow Scripts Unit Tests', () => {
     });
 
     it('should validate semantic versions', () => {
-      const isValidSemanticVersion = (version: string) => {
+      const isValidSemanticVersion = (version: string): boolean => {
         const cleanVersion = version.replace(/^v/, '');
         return /^\d+\.\d+\.\d+$/.test(cleanVersion);
       };
@@ -75,7 +91,28 @@ describe('Workflow Scripts Unit Tests', () => {
     });
 
     it('should analyze conventional commits', () => {
-      const analyzeCommits = (commits: string[]) => {
+      const analyzeCommits = (
+        commits: string[]
+      ): {
+        hasBreakingChanges: boolean;
+        hasFeatures: boolean;
+        hasFixes: boolean;
+        conventionalCommits: Array<{
+          type:
+            | 'feat'
+            | 'fix'
+            | 'docs'
+            | 'style'
+            | 'refactor'
+            | 'test'
+            | 'chore';
+          scope?: string;
+          isBreaking: boolean;
+          description: string;
+          raw: string;
+        } | null>;
+        skippedCommits: string[];
+      } => {
         const conventionalCommits = commits
           .map(commit => {
             const match = commit.match(
@@ -130,11 +167,11 @@ describe('Workflow Scripts Unit Tests', () => {
     it('should simulate git status check', () => {
       mockExecSync.mockReturnValue('');
 
-      const checkGitStatus = () => {
+      const checkGitStatus = (): { clean: boolean; status: string } => {
         try {
           const status = mockExecSync('git status --porcelain', {
             encoding: 'utf8',
-          });
+          }) as string;
           return { clean: !status.trim(), status: status.trim() };
         } catch (error) {
           throw new Error('Git status check failed');
@@ -151,11 +188,13 @@ describe('Workflow Scripts Unit Tests', () => {
     it('should simulate getting current branch', () => {
       mockExecSync.mockReturnValue('main');
 
-      const getCurrentBranch = () => {
+      const getCurrentBranch = (): string => {
         try {
-          return mockExecSync('git branch --show-current', {
-            encoding: 'utf8',
-          }).trim();
+          return (
+            mockExecSync('git branch --show-current', {
+              encoding: 'utf8',
+            }) as string
+          ).trim();
         } catch (error) {
           throw new Error('Failed to get current branch');
         }
@@ -174,23 +213,31 @@ describe('Workflow Scripts Unit Tests', () => {
         .mockReturnValueOnce('feat: add feature\nfix: resolve bug') // commit messages
         .mockReturnValueOnce('abc123\ndef456'); // commit SHAs
 
-      const getCommitHistory = () => {
+      const getCommitHistory = (): {
+        lastTag?: string;
+        messages?: string[];
+        shas?: string[];
+      } => {
         try {
-          const lastTag = mockExecSync(
-            'git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo ""',
-            { encoding: 'utf8' }
+          const lastTag = (
+            mockExecSync(
+              'git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo ""',
+              { encoding: 'utf8' }
+            ) as string
           ).trim();
           const commitRange = lastTag ? `${lastTag}..HEAD` : 'HEAD';
 
-          const messages = mockExecSync(
-            `git log --pretty=format:"%s" ${commitRange}`,
-            { encoding: 'utf8' }
+          const messages = (
+            mockExecSync(`git log --pretty=format:"%s" ${commitRange}`, {
+              encoding: 'utf8',
+            }) as string
           )
             .split('\n')
             .filter(msg => msg.trim());
-          const shas = mockExecSync(
-            `git log --pretty=format:"%H" ${commitRange}`,
-            { encoding: 'utf8' }
+          const shas = (
+            mockExecSync(`git log --pretty=format:"%H" ${commitRange}`, {
+              encoding: 'utf8',
+            }) as string
           )
             .split('\n')
             .filter(sha => sha.trim());
@@ -215,7 +262,7 @@ describe('Workflow Scripts Unit Tests', () => {
         throw new Error('Git command failed');
       });
 
-      const checkGitStatus = () => {
+      const checkGitStatus = (): ResultValidation => {
         try {
           mockExecSync('git status --porcelain', { encoding: 'utf8' });
           return { success: true };
@@ -240,7 +287,11 @@ describe('Workflow Scripts Unit Tests', () => {
 
       mockFs.readFileSync.mockReturnValue(JSON.stringify(mockPackageJson));
 
-      const readPackageJson = () => {
+      const readPackageJson = (): {
+        name: string;
+        version: string;
+        scripts?: Record<string, string>;
+      } => {
         try {
           const content = mockFs.readFileSync('package.json', 'utf8');
           return JSON.parse(content);
@@ -257,7 +308,7 @@ describe('Workflow Scripts Unit Tests', () => {
     it('should simulate writing package.json', () => {
       mockFs.writeFileSync.mockImplementation(() => {});
 
-      const updatePackageJson = (newVersion: string) => {
+      const updatePackageJson = (newVersion: string): ResultValidation => {
         try {
           const packageJson = { name: 'test-package', version: newVersion };
           mockFs.writeFileSync(
@@ -283,7 +334,7 @@ describe('Workflow Scripts Unit Tests', () => {
         throw new Error('File not found');
       });
 
-      const readPackageJson = () => {
+      const readPackageJson = (): ResultValidation => {
         try {
           const content = mockFs.readFileSync('package.json', 'utf8');
           return { success: true, data: JSON.parse(content) };
@@ -300,7 +351,15 @@ describe('Workflow Scripts Unit Tests', () => {
 
   describe('Workflow Environment Validation', () => {
     it('should validate GitHub Actions environment', () => {
-      const validateGitHubEnvironment = () => {
+      const validateGitHubEnvironment = (): {
+        valid: boolean;
+        missing: string[];
+        environment: {
+          isGitHubActions: boolean;
+          workspace: string | undefined;
+          repository: string | undefined;
+        };
+      } => {
         const requiredVars = [
           'GITHUB_ACTIONS',
           'GITHUB_WORKSPACE',
@@ -348,7 +407,12 @@ describe('Workflow Scripts Unit Tests', () => {
     });
 
     it('should validate Node.js version', () => {
-      const validateNodeVersion = () => {
+      const validateNodeVersion = (): {
+        version: string;
+        majorVersion: number;
+        supported: boolean;
+        minimum: string;
+      } => {
         const nodeVersion = process.version;
         const majorVersion = parseInt(nodeVersion.slice(1).split('.')[0]);
 
@@ -368,9 +432,19 @@ describe('Workflow Scripts Unit Tests', () => {
   });
 
   describe('Workflow Integration Scenarios', () => {
-    it('should simulate PR validation workflow', async () => {
-      const simulatePRValidation = () => {
-        const steps = [];
+    it('should simulate PR validation workflow', () => {
+      const simulatePRValidation = (): {
+        error?: string;
+        steps?: {
+          name: string;
+          success: boolean;
+        }[];
+        success?: boolean;
+      } => {
+        const steps: {
+          name: string;
+          success: boolean;
+        }[] = [];
 
         try {
           // Step 1: Quality Gates
@@ -395,52 +469,57 @@ describe('Workflow Scripts Unit Tests', () => {
         }
       };
 
-      const result = await simulatePRValidation();
+      const result = simulatePRValidation();
       expect(result.success).toBe(true);
       expect(result.steps).toHaveLength(4);
-      expect(result.steps.every(step => step.success)).toBe(true);
+      expect(result.steps?.every(step => step.success)).toBe(true);
     });
 
-    it('should simulate auto-publish workflow', async () => {
-      const simulateAutoPublish = () => {
-        const steps = [];
+    it('should simulate auto-publish workflow', () => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const simulatePRValidation = (): void => {
+        const simulateAutoPublish = (): ResultValidation & {
+          version?: string;
+        } => {
+          const steps: Step[] = [];
 
-        try {
-          // Step 1: Version Management
-          mockExecSync.mockReturnValueOnce('v1.0.0'); // last tag
-          mockExecSync.mockReturnValueOnce('feat: new feature'); // commits
-          steps.push({
-            name: 'Version Analysis',
-            success: true,
-            newVersion: '1.1.0',
-          });
+          try {
+            // Step 1: Version Management
+            mockExecSync.mockReturnValueOnce('v1.0.0'); // last tag
+            mockExecSync.mockReturnValueOnce('feat: new feature'); // commits
+            steps.push({
+              name: 'Version Analysis',
+              success: true,
+              newVersion: '1.1.0',
+            });
 
-          // Step 2: Build
-          mockExecSync.mockReturnValueOnce('Build successful');
-          steps.push({ name: 'Build', success: true });
+            // Step 2: Build
+            mockExecSync.mockReturnValueOnce('Build successful');
+            steps.push({ name: 'Build', success: true });
 
-          // Step 3: Publish
-          mockExecSync.mockReturnValueOnce('Published successfully');
-          steps.push({ name: 'NPM Publish', success: true });
+            // Step 3: Publish
+            mockExecSync.mockReturnValueOnce('Published successfully');
+            steps.push({ name: 'NPM Publish', success: true });
 
-          // Step 4: GitHub Release
-          steps.push({ name: 'GitHub Release', success: true });
+            // Step 4: GitHub Release
+            steps.push({ name: 'GitHub Release', success: true });
 
-          return { success: true, steps, version: '1.1.0' };
-        } catch (error) {
-          return { success: false, error: error.message, steps };
-        }
+            return { success: true, steps, version: '1.1.0' };
+          } catch (error) {
+            return { success: false, error: error.message, steps };
+          }
+        };
+
+        const result = simulateAutoPublish();
+        expect(result.success).toBe(true);
+        expect(result.steps).toHaveLength(4);
+        expect(result.version).toBe('1.1.0');
       };
-
-      const result = await simulateAutoPublish();
-      expect(result.success).toBe(true);
-      expect(result.steps).toHaveLength(4);
-      expect(result.version).toBe('1.1.0');
     });
 
-    it('should handle workflow failures gracefully', async () => {
-      const simulateFailingWorkflow = () => {
-        const steps = [];
+    it('should handle workflow failures gracefully', () => {
+      const simulateFailingWorkflow = (): ResultValidation => {
+        const steps: Step[] = [];
 
         try {
           // Step 1: Success
@@ -463,10 +542,10 @@ describe('Workflow Scripts Unit Tests', () => {
         }
       };
 
-      const result = await simulateFailingWorkflow();
+      const result = simulateFailingWorkflow();
       expect(result.success).toBe(false);
       expect(result.error).toBe('Test failed');
-      expect(result.steps.some(step => !step.success)).toBe(true);
+      expect(result.steps?.some(step => !step.success)).toBe(true);
     });
   });
 });

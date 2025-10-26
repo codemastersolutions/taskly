@@ -23,7 +23,7 @@ describe('Workflow Integration Tests', () => {
   });
 
   describe('PR Validation Workflow Integration', () => {
-    it('should simulate complete PR validation flow', async () => {
+    it('should simulate complete PR validation flow', () => {
       // Mock successful quality checks
       mockExecSync
         .mockReturnValueOnce('') // ESLint (no output = success)
@@ -38,10 +38,10 @@ describe('Workflow Integration Tests', () => {
       mockFs.readFileSync.mockReturnValue(JSON.stringify({ version: '1.0.0' }));
 
       // Simulate workflow steps
-      const qualityGatesResult = await simulateQualityGates();
-      const securityAuditResult = await simulateSecurityAudit();
-      const testMatrixResult = await simulateTestMatrix();
-      const buildValidationResult = await simulateBuildValidation();
+      const qualityGatesResult = simulateQualityGates();
+      const securityAuditResult = simulateSecurityAudit();
+      const testMatrixResult = simulateTestMatrix();
+      const buildValidationResult = simulateBuildValidation();
 
       expect(qualityGatesResult.success).toBe(true);
       expect(securityAuditResult.success).toBe(true);
@@ -49,73 +49,81 @@ describe('Workflow Integration Tests', () => {
       expect(buildValidationResult.success).toBe(true);
     });
 
-    it('should handle quality gate failures', async () => {
+    it('should handle quality gate failures', () => {
       // Mock ESLint failure
       mockExecSync.mockImplementation(command => {
         if (command.includes('eslint')) {
-          const error = new Error('ESLint errors found');
+          const error = new Error('ESLint errors found') as Error & {
+            status?: number;
+          };
           error.status = 1;
           throw error;
         }
         return '';
       });
 
-      const result = await simulateQualityGates();
+      const result = simulateQualityGates();
       expect(result.success).toBe(false);
       expect(result.error).toContain('ESLint errors found');
     });
 
-    it('should handle security audit failures', async () => {
+    it('should handle security audit failures', () => {
       // Mock npm audit with vulnerabilities
       mockExecSync.mockImplementation(command => {
         if (command.includes('npm audit')) {
-          const error = new Error('5 high severity vulnerabilities');
+          const error = new Error(
+            '5 high severity vulnerabilities'
+          ) as Error & { status?: number };
           error.status = 1;
           throw error;
         }
         return '';
       });
 
-      const result = await simulateSecurityAudit();
+      const result = simulateSecurityAudit();
       expect(result.success).toBe(false);
       expect(result.error).toContain('vulnerabilities');
     });
 
-    it('should handle test failures', async () => {
+    it('should handle test failures', () => {
       // Mock test failure
       mockExecSync.mockImplementation(command => {
         if (command.includes('test')) {
-          const error = new Error('Tests failed');
+          const error = new Error('Tests failed') as Error & {
+            status?: number;
+          };
           error.status = 1;
           throw error;
         }
         return '';
       });
 
-      const result = await simulateTestMatrix();
+      const result = simulateTestMatrix();
       expect(result.success).toBe(false);
       expect(result.error).toContain('Tests failed');
     });
 
-    it('should handle build failures', async () => {
+    it('should handle build failures', () => {
       // Mock build failure
       mockExecSync.mockImplementation(command => {
         if (command.includes('build')) {
-          const error = new Error('Build failed');
+          const error = new Error('Build failed') as Error & {
+            status?: number;
+          };
           error.status = 1;
           throw error;
         }
         return '';
       });
 
-      const result = await simulateBuildValidation();
+      const result = simulateBuildValidation();
       expect(result.success).toBe(false);
       expect(result.error).toContain('Build failed');
     });
   });
 
   describe('Auto-Publish Workflow Integration', () => {
-    it('should simulate complete auto-publish flow', async () => {
+    it('should simulate complete auto-publish flow', () => {
       // Mock version management
       mockExecSync
         .mockReturnValueOnce('v1.0.0') // last tag
@@ -132,9 +140,9 @@ describe('Workflow Integration Tests', () => {
       mockFs.writeFileSync.mockImplementation(() => {});
       mockFs.existsSync.mockReturnValue(true);
 
-      const versionResult = await simulateVersionManagement();
-      const publishResult = await simulateNpmPublish();
-      const releaseResult = await simulateGitHubRelease();
+      const versionResult = simulateVersionManagement();
+      const publishResult = simulateNpmPublish();
+      const releaseResult = simulateGitHubRelease();
 
       expect(versionResult.success).toBe(true);
       expect(versionResult.newVersion).toBe('1.1.0');
@@ -142,36 +150,38 @@ describe('Workflow Integration Tests', () => {
       expect(releaseResult.success).toBe(true);
     });
 
-    it('should handle version management failures', async () => {
+    it('should handle version management failures', () => {
       // Mock git command failure
       mockExecSync.mockImplementation(() => {
         throw new Error('Git command failed');
       });
 
-      const result = await simulateVersionManagement();
+      const result = simulateVersionManagement();
       expect(result.success).toBe(false);
       expect(result.error).toContain('Git command failed');
     });
 
-    it('should handle npm publish failures', async () => {
+    it('should handle npm publish failures', () => {
       // Mock npm publish failure
       mockExecSync.mockImplementation(command => {
         if (command.includes('npm publish')) {
-          const error = new Error('Publish failed');
+          const error = new Error('Publish failed') as Error & {
+            status?: number;
+          };
           error.status = 1;
           throw error;
         }
         return '';
       });
 
-      const result = await simulateNpmPublish();
+      const result = simulateNpmPublish();
       expect(result.success).toBe(false);
       expect(result.error).toContain('Publish failed');
     });
 
-    it('should handle GitHub release failures', async () => {
+    it('should handle GitHub release failures', () => {
       // Mock GitHub API failure
-      const result = await simulateGitHubRelease(true);
+      const result = simulateGitHubRelease(true);
       expect(result.success).toBe(false);
       expect(result.error).toContain('GitHub API error');
     });
@@ -206,7 +216,7 @@ describe('Workflow Integration Tests', () => {
   });
 
   describe('Workflow File Validation', () => {
-    it('should validate workflow YAML syntax', async () => {
+    it('should validate workflow YAML syntax', () => {
       const workflowFiles = [
         '.github/workflows/pr-validation.yml',
         '.github/workflows/auto-publish.yml',
@@ -225,27 +235,23 @@ jobs:
 `);
 
       for (const file of workflowFiles) {
-        const result = await validateWorkflowFile(file);
+        const result = validateWorkflowFile(file);
         expect(result.valid).toBe(true);
       }
     });
 
-    it('should detect invalid YAML syntax', async () => {
+    it('should detect invalid YAML syntax', () => {
       mockFs.existsSync.mockReturnValue(true);
       mockFs.readFileSync.mockReturnValue('invalid: yaml: content:');
 
-      const result = await validateWorkflowFile(
-        '.github/workflows/invalid.yml'
-      );
+      const result = validateWorkflowFile('.github/workflows/invalid.yml');
       expect(result.valid).toBe(false);
     });
 
-    it('should handle missing workflow files', async () => {
+    it('should handle missing workflow files', () => {
       mockFs.existsSync.mockReturnValue(false);
 
-      const result = await validateWorkflowFile(
-        '.github/workflows/missing.yml'
-      );
+      const result = validateWorkflowFile('.github/workflows/missing.yml');
       expect(result.valid).toBe(false);
       expect(result.error).toContain('not found');
     });
@@ -253,7 +259,7 @@ jobs:
 });
 
 // Helper functions to simulate workflow steps
-function simulateQualityGates() {
+function simulateQualityGates(): { success: boolean; error?: string } {
   try {
     // Simulate ESLint
     mockExecSync('eslint src --ext .ts --max-warnings 0');
@@ -266,44 +272,62 @@ function simulateQualityGates() {
 
     return { success: true };
   } catch (error) {
-    return { success: false, error: error.message };
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
-function simulateSecurityAudit() {
+function simulateSecurityAudit(): { success: boolean; error?: string } {
   try {
     // Simulate npm audit
     mockExecSync('npm audit --audit-level moderate');
 
     return { success: true };
   } catch (error) {
-    return { success: false, error: error.message };
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
-function simulateTestMatrix() {
+function simulateTestMatrix(): { success: boolean; error?: string } {
   try {
     // Simulate test execution
     mockExecSync('npm test');
 
     return { success: true };
   } catch (error) {
-    return { success: false, error: error.message };
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
-function simulateBuildValidation() {
+function simulateBuildValidation(): { success: boolean; error?: string } {
   try {
     // Simulate build
     mockExecSync('npm run build:prod');
 
     return { success: true };
   } catch (error) {
-    return { success: false, error: error.message };
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
-function simulateVersionManagement() {
+function simulateVersionManagement(): {
+  success: boolean;
+  error?: string;
+  currentVersion?: string;
+  newVersion?: string;
+  incrementType?: string;
+} {
   try {
     // Simulate git commands that could fail
     mockExecSync('git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo ""');
@@ -321,22 +345,31 @@ function simulateVersionManagement() {
       incrementType: 'minor',
     };
   } catch (error) {
-    return { success: false, error: error.message };
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
-function simulateNpmPublish() {
+function simulateNpmPublish(): { success: boolean; error?: string } {
   try {
     // Simulate npm publish
     mockExecSync('npm publish');
 
     return { success: true };
   } catch (error) {
-    return { success: false, error: error.message };
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
-function simulateGitHubRelease(shouldFail = false) {
+function simulateGitHubRelease(shouldFail = false): {
+  success: boolean;
+  error?: string;
+} {
   try {
     if (shouldFail) {
       throw new Error('GitHub API error');
@@ -344,11 +377,17 @@ function simulateGitHubRelease(shouldFail = false) {
 
     return { success: true };
   } catch (error) {
-    return { success: false, error: error.message };
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
-function validateWorkflowEnvironment() {
+function validateWorkflowEnvironment(): {
+  valid: boolean;
+  missingVars: string[];
+} {
   const requiredVars = [
     'GITHUB_ACTIONS',
     'GITHUB_WORKSPACE',
@@ -363,7 +402,10 @@ function validateWorkflowEnvironment() {
   };
 }
 
-function validateWorkflowFile(filePath: string) {
+function validateWorkflowFile(filePath: string): {
+  valid: boolean;
+  error?: string;
+} {
   try {
     if (!mockFs.existsSync(filePath)) {
       return { valid: false, error: `Workflow file ${filePath} not found` };
@@ -378,6 +420,9 @@ function validateWorkflowFile(filePath: string) {
 
     return { valid: true };
   } catch (error) {
-    return { valid: false, error: error.message };
+    return {
+      valid: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }

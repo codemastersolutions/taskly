@@ -34,7 +34,15 @@ describe('Comprehensive Workflow Tests', () => {
   describe('Unit Tests for Version Management Scripts', () => {
     describe('Version Parsing and Validation', () => {
       it('should parse semantic versions correctly', () => {
-        const parseSemanticVersion = (version: string) => {
+        const parseSemanticVersion = (
+          version: string
+        ): {
+          major: number;
+          minor: number;
+          patch: number;
+          original: string;
+          clean: string;
+        } => {
           const cleanVersion = version.replace(/^v/, '');
           const versionRegex = /^(\d+)\.(\d+)\.(\d+)$/;
           const match = cleanVersion.match(versionRegex);
@@ -85,7 +93,7 @@ describe('Comprehensive Workflow Tests', () => {
         const incrementVersion = (
           version: string,
           type: 'major' | 'minor' | 'patch'
-        ) => {
+        ): string => {
           const cleanVersion = version.replace(/^v/, '');
           const [major, minor, patch] = cleanVersion.split('.').map(Number);
 
@@ -109,7 +117,7 @@ describe('Comprehensive Workflow Tests', () => {
       });
 
       it('should validate semantic version format', () => {
-        const isValidSemanticVersion = (version: string) => {
+        const isValidSemanticVersion = (version: string): boolean => {
           const cleanVersion = version.replace(/^v/, '');
           return /^\d+\.\d+\.\d+$/.test(cleanVersion);
         };
@@ -127,7 +135,22 @@ describe('Comprehensive Workflow Tests', () => {
 
     describe('Conventional Commit Analysis', () => {
       it('should parse conventional commit messages', () => {
-        const parseConventionalCommit = (message: string) => {
+        const parseConventionalCommit = (
+          message: string
+        ): {
+          type:
+            | 'feat'
+            | 'fix'
+            | 'docs'
+            | 'style'
+            | 'refactor'
+            | 'test'
+            | 'chore';
+          scope?: string;
+          isBreaking: boolean;
+          description: string;
+          raw: string;
+        } | null => {
           const conventionalPattern =
             /^(feat|fix|docs|style|refactor|test|chore)(\(.+\))?(!)?:\s*(.+)$/;
           const match = message.match(conventionalPattern);
@@ -190,14 +213,23 @@ describe('Comprehensive Workflow Tests', () => {
       });
 
       it('should analyze multiple commits and determine version increment', () => {
-        const analyzeCommitsForVersioning = (commits: string[]) => {
+        const analyzeCommitsForVersioning = (
+          commits: string[]
+        ): {
+          hasBreakingChanges: boolean;
+          hasFeatures: boolean;
+          hasFixes: boolean;
+          conventionalCommits: unknown[];
+          skippedCommits: string[];
+          incrementType: 'major' | 'minor' | 'patch';
+        } => {
           const conventionalPattern =
             /^(feat|fix|docs|style|refactor|test|chore)(\(.+\))?(!)?:\s*(.+)$/;
 
           let hasBreakingChanges = false;
           let hasFeatures = false;
           let hasFixes = false;
-          const conventionalCommits: any[] = [];
+          const conventionalCommits: unknown[] = [];
           const skippedCommits: string[] = [];
 
           commits.forEach(commit => {
@@ -273,38 +305,44 @@ describe('Comprehensive Workflow Tests', () => {
           .mockReturnValueOnce('feat: add feature\nfix: resolve bug') // git log messages
           .mockReturnValueOnce('abc123\ndef456'); // git log SHAs
 
-        const getCommitsSinceLastRelease = () => {
+        const getCommitsSinceLastRelease = (): {
+          lastTag: string;
+          commitMessages: string[];
+          commitShas: string[];
+        } => {
           try {
-            const lastTag = mockExecSync(
-              'git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo ""',
-              {
-                encoding: 'utf8',
-              }
+            const lastTag = (
+              mockExecSync(
+                'git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo ""',
+                {
+                  encoding: 'utf8',
+                }
+              ) as string
             ).trim();
 
             const commitRange = lastTag ? `${lastTag}..HEAD` : 'HEAD';
 
-            const commitMessages = mockExecSync(
-              `git log --pretty=format:"%s" ${commitRange}`,
-              {
+            const commitMessages = (
+              mockExecSync(`git log --pretty=format:"%s" ${commitRange}`, {
                 encoding: 'utf8',
-              }
+              }) as string
             )
               .split('\n')
               .filter(msg => msg.trim());
 
-            const commitShas = mockExecSync(
-              `git log --pretty=format:"%H" ${commitRange}`,
-              {
+            const commitShas = (
+              mockExecSync(`git log --pretty=format:"%H" ${commitRange}`, {
                 encoding: 'utf8',
-              }
+              }) as string
             )
               .split('\n')
               .filter(sha => sha.trim());
 
             return { lastTag, commitMessages, commitShas };
           } catch (error) {
-            throw new Error(`Git operation failed: ${error.message}`);
+            throw new Error(
+              `Git operation failed: ${error instanceof Error ? error.message : String(error)}`
+            );
           }
         };
 
@@ -324,12 +362,15 @@ describe('Comprehensive Workflow Tests', () => {
           throw new Error('Git command failed');
         });
 
-        const safeGitOperation = () => {
+        const safeGitOperation = (): { success: boolean; error?: string } => {
           try {
             mockExecSync('git status', { encoding: 'utf8' });
             return { success: true };
           } catch (error) {
-            return { success: false, error: error.message };
+            return {
+              success: false,
+              error: error instanceof Error ? error.message : String(error),
+            };
           }
         };
 
@@ -350,7 +391,9 @@ describe('Comprehensive Workflow Tests', () => {
         mockFs.readFileSync.mockReturnValue(JSON.stringify(mockPackageJson));
         mockFs.writeFileSync.mockImplementation(() => {});
 
-        const updatePackageVersion = (newVersion: string) => {
+        const updatePackageVersion = (
+          newVersion: string
+        ): { success: boolean; version?: string; error?: string } => {
           try {
             const content = mockFs.readFileSync('package.json', 'utf8');
             const packageJson = JSON.parse(content);
@@ -363,7 +406,10 @@ describe('Comprehensive Workflow Tests', () => {
 
             return { success: true, version: newVersion };
           } catch (error) {
-            return { success: false, error: error.message };
+            return {
+              success: false,
+              error: error instanceof Error ? error.message : String(error),
+            };
           }
         };
 
@@ -383,12 +429,17 @@ describe('Comprehensive Workflow Tests', () => {
           throw new Error('File not found');
         });
 
-        const safeFileRead = (filePath: string) => {
+        const safeFileRead = (
+          filePath: string
+        ): { success: boolean; content?: string; error?: string } => {
           try {
             const content = mockFs.readFileSync(filePath, 'utf8');
             return { success: true, content };
           } catch (error) {
-            return { success: false, error: error.message };
+            return {
+              success: false,
+              error: error instanceof Error ? error.message : String(error),
+            };
           }
         };
 
@@ -402,7 +453,17 @@ describe('Comprehensive Workflow Tests', () => {
   describe('Integration Tests for Workflows', () => {
     describe('PR Validation Workflow', () => {
       it('should simulate complete PR validation pipeline', async () => {
-        const simulatePRValidation = async () => {
+        const simulatePRValidation = async (): Promise<{
+          workflow: string;
+          success: boolean;
+          steps: Array<{
+            name: string;
+            command: string;
+            success: boolean;
+            duration: number;
+          }>;
+          totalDuration: number;
+        }> => {
           const steps = [
             { name: 'Checkout', command: 'actions/checkout@v4' },
             { name: 'Setup Node.js', command: 'actions/setup-node@v4' },
@@ -415,7 +476,12 @@ describe('Comprehensive Workflow Tests', () => {
             { name: 'Build Validation', command: 'npm run build' },
           ];
 
-          const results = [];
+          const results: Array<{
+            name: string;
+            command: string;
+            success: boolean;
+            duration: number;
+          }> = [];
 
           for (const step of steps) {
             const startTime = Date.now();
@@ -447,8 +513,13 @@ describe('Comprehensive Workflow Tests', () => {
         expect(result.totalDuration).toBeGreaterThan(0);
       });
 
-      it('should handle PR validation failures', async () => {
-        const simulateFailingPRValidation = () => {
+      it('should handle PR validation failures', () => {
+        const simulateFailingPRValidation = (): {
+          workflow: string;
+          success: boolean;
+          failedStep?: { name: string; success: boolean; error?: string };
+          steps: Array<{ name: string; success: boolean; error?: string }>;
+        } => {
           const steps = [
             { name: 'Checkout', success: true },
             { name: 'Setup Node.js', success: true },
@@ -463,7 +534,7 @@ describe('Comprehensive Workflow Tests', () => {
           };
         };
 
-        const result = await simulateFailingPRValidation();
+        const result = simulateFailingPRValidation();
 
         expect(result.success).toBe(false);
         expect(result.failedStep?.name).toBe('ESLint');
@@ -472,8 +543,13 @@ describe('Comprehensive Workflow Tests', () => {
     });
 
     describe('Auto-Publish Workflow', () => {
-      it('should simulate complete auto-publish pipeline', async () => {
-        const simulateAutoPublish = () => {
+      it('should simulate complete auto-publish pipeline', () => {
+        const simulateAutoPublish = (): {
+          workflow: string;
+          success: boolean;
+          jobs: Array<{ name: string; steps: string[]; success: boolean }>;
+          version: string;
+        } => {
           const jobs = [
             {
               name: 'Version Management',
@@ -505,7 +581,7 @@ describe('Comprehensive Workflow Tests', () => {
           };
         };
 
-        const result = await simulateAutoPublish();
+        const result = simulateAutoPublish();
 
         expect(result.success).toBe(true);
         expect(result.jobs).toHaveLength(4);
@@ -513,8 +589,13 @@ describe('Comprehensive Workflow Tests', () => {
         expect(result.workflow).toBe('Auto Publish');
       });
 
-      it('should handle publish failures', async () => {
-        const simulateFailingPublish = () => {
+      it('should handle publish failures', () => {
+        const simulateFailingPublish = (): {
+          workflow: string;
+          success: boolean;
+          failedJob?: { name: string; success: boolean; error?: string };
+          jobs: Array<{ name: string; success: boolean; error?: string }>;
+        } => {
           const jobs = [
             { name: 'Version Management', success: true },
             { name: 'Pre-publish Validation', success: true },
@@ -529,7 +610,7 @@ describe('Comprehensive Workflow Tests', () => {
           };
         };
 
-        const result = await simulateFailingPublish();
+        const result = simulateFailingPublish();
 
         expect(result.success).toBe(false);
         expect(result.failedJob?.name).toBe('NPM Publish');
@@ -541,7 +622,15 @@ describe('Comprehensive Workflow Tests', () => {
   describe('Test Environment Configuration', () => {
     describe('GitHub Actions Environment Setup', () => {
       it('should configure GitHub Actions environment variables', () => {
-        const setupGitHubEnvironment = (config = {}) => {
+        const setupGitHubEnvironment = (
+          config: Record<string, string> = {}
+        ): {
+          repository: string;
+          branch: string;
+          sha: string;
+          runId: string;
+          actor: string;
+        } => {
           const defaults = {
             repository: 'codemastersolutions/taskly',
             branch: 'main',
@@ -575,7 +664,12 @@ describe('Comprehensive Workflow Tests', () => {
       });
 
       it('should validate environment configuration', () => {
-        const validateEnvironment = () => {
+        const validateEnvironment = (): {
+          valid: boolean;
+          missing: string[];
+          nodeVersion: string;
+          nodeSupported: boolean;
+        } => {
           const requiredVars = [
             'GITHUB_ACTIONS',
             'GITHUB_REPOSITORY',
@@ -611,7 +705,11 @@ describe('Comprehensive Workflow Tests', () => {
 
     describe('Test Data Generation', () => {
       it('should generate realistic test data', () => {
-        const generateTestData = () => {
+        const generateTestData = (): {
+          commits: string[];
+          packageJson: Record<string, unknown>;
+          shas: string[];
+        } => {
           const commitTypes = [
             'feat',
             'fix',
@@ -630,7 +728,7 @@ describe('Comprehensive Workflow Tests', () => {
             'refactor code structure',
           ];
 
-          const generateCommits = (count: number) => {
+          const generateCommits = (count: number): string[] => {
             return Array.from({ length: count }, (_, i) => {
               const type = commitTypes[i % commitTypes.length];
               const scope = i % 3 === 0 ? `(${scopes[i % scopes.length]})` : '';
@@ -641,7 +739,9 @@ describe('Comprehensive Workflow Tests', () => {
             });
           };
 
-          const generatePackageJson = (version: string) => ({
+          const generatePackageJson = (
+            version: string
+          ): Record<string, unknown> => ({
             name: '@codemastersolutions/taskly',
             version,
             description:
@@ -679,7 +779,10 @@ describe('Comprehensive Workflow Tests', () => {
 
     describe('Workflow File Validation', () => {
       it('should validate workflow YAML structure', () => {
-        const generateWorkflowYAML = (name: string, trigger: string) => {
+        const generateWorkflowYAML = (
+          name: string,
+          trigger: string
+        ): string => {
           return `
 name: ${name}
 on:
@@ -701,7 +804,15 @@ jobs:
 `;
         };
 
-        const validateWorkflowYAML = (yaml: string) => {
+        const validateWorkflowYAML = (
+          yaml: string
+        ): {
+          valid: boolean;
+          hasName: boolean;
+          hasTrigger: boolean;
+          hasJobs: boolean;
+          hasCheckout: boolean;
+        } => {
           const requiredFields = ['name:', 'on:', 'jobs:'];
           const hasAllFields = requiredFields.every(field =>
             yaml.includes(field)
@@ -735,7 +846,12 @@ jobs:
 
   describe('Performance and Monitoring', () => {
     it('should track workflow execution metrics', async () => {
-      const trackWorkflowMetrics = async () => {
+      const trackWorkflowMetrics = async (): Promise<{
+        executionTime: number;
+        memoryUsage: NodeJS.MemoryUsage;
+        nodeVersion: string;
+        timestamp: string;
+      }> => {
         const startTime = Date.now();
 
         // Simulate workflow execution
@@ -762,7 +878,13 @@ jobs:
     it('should collect workflow statistics', () => {
       const collectWorkflowStats = (
         results: Array<{ success: boolean; duration: number }>
-      ) => {
+      ): {
+        totalRuns: number;
+        successfulRuns: number;
+        failedRuns: number;
+        successRate: number;
+        averageDuration: number;
+      } => {
         const totalRuns = results.length;
         const successfulRuns = results.filter(r => r.success).length;
         const failedRuns = totalRuns - successfulRuns;

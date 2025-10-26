@@ -52,7 +52,7 @@ export const DEFAULT_COLORS: Color[] = [
  */
 export function supportsColor(): boolean {
   // Check common environment variables
-  if (process.env.NO_COLOR || process.env.NODE_DISABLE_COLORS) {
+  if (process.env.NO_COLOR != null || process.env.NODE_DISABLE_COLORS != null) {
     return false;
   }
 
@@ -222,6 +222,7 @@ export function truncateText(
   const hasAnsi = text !== stripped;
   if (hasAnsi) {
     // Extract color codes from the beginning of the original text
+    // eslint-disable-next-line no-control-regex
     const colorMatch = text.match(/^(\x1b\[[0-9;]*m)*/);
     const colorPrefix = colorMatch ? colorMatch[0] : '';
     return colorPrefix + truncated + suffix + ANSI_RESET;
@@ -281,7 +282,7 @@ export function formatOutputLine(
   timestamp?: Date,
   prefixWidth: number = 12
 ): OutputLine {
-  const now = timestamp || new Date();
+  const now = timestamp ?? new Date();
   const prefix = createPrefix(identifier, color, now, prefixWidth);
   const separator =
     type === 'stderr' ? colorize('│', 'red') : colorize('│', 'gray');
@@ -417,14 +418,14 @@ export function mergeOutputStreams(streams: OutputLine[][]): OutputLine[] {
  * Gets terminal width
  */
 export function getTerminalWidth(): number {
-  return process.stdout.columns || 80;
+  return process.stdout.columns ?? 80;
 }
 
 /**
  * Gets terminal height
  */
 export function getTerminalHeight(): number {
-  return process.stdout.rows || 24;
+  return process.stdout.rows ?? 24;
 }
 
 /**
@@ -432,13 +433,13 @@ export function getTerminalHeight(): number {
  */
 export function isCI(): boolean {
   return !!(
-    process.env.CI ||
-    process.env.CONTINUOUS_INTEGRATION ||
-    process.env.BUILD_NUMBER ||
-    process.env.GITHUB_ACTIONS ||
-    process.env.GITLAB_CI ||
-    process.env.CIRCLECI ||
-    process.env.TRAVIS ||
-    process.env.JENKINS_URL
+    process.env.CI != null ||
+    process.env.CONTINUOUS_INTEGRATION != null ||
+    process.env.BUILD_NUMBER != null ||
+    process.env.GITHUB_ACTIONS != null ||
+    process.env.GITLAB_CI != null ||
+    process.env.CIRCLECI != null ||
+    process.env.TRAVIS != null ||
+    process.env.JENKINS_URL != null
   );
 }

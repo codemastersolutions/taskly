@@ -16,15 +16,13 @@ vi.mock('@octokit/rest', () => ({
 }));
 
 // Mock process.exit to prevent actual exits during tests
-const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
+vi.spyOn(process, 'exit').mockImplementation(() => {
   throw new Error('process.exit called');
 });
 
 // Mock console methods to prevent noise during tests
-const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
-const mockConsoleError = vi
-  .spyOn(console, 'error')
-  .mockImplementation(() => {});
+vi.spyOn(console, 'log').mockImplementation(() => {});
+vi.spyOn(console, 'error').mockImplementation(() => {});
 
 describe('Branch Protection Script', () => {
   const originalEnv = process.env;
@@ -189,7 +187,7 @@ describe('Branch Protection Script', () => {
 
     it('should handle API errors', async () => {
       const apiError = new Error('API Error');
-      (apiError as any).status = 403;
+      (apiError as Error & { status?: number }).status = 403;
       mockUpdateBranchProtection.mockRejectedValue(apiError);
 
       await expect(mockUpdateBranchProtection()).rejects.toThrow('API Error');
@@ -197,7 +195,7 @@ describe('Branch Protection Script', () => {
 
     it('should handle 404 errors', async () => {
       const notFoundError = new Error('Not Found');
-      (notFoundError as unknown).status = 404;
+      (notFoundError as Error & { status?: number }).status = 404;
       mockGetBranchProtection.mockRejectedValue(notFoundError);
 
       await expect(mockGetBranchProtection()).rejects.toThrow('Not Found');

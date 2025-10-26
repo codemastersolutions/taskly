@@ -358,7 +358,7 @@ jobs:
 
       // Mock required files and commands
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readdirSync.mockReturnValue(['ci.yml', 'release.yml'] as any);
+      mockFs.readdirSync.mockReturnValue(['ci.yml', 'release.yml'] as never);
       mockFs.readFileSync.mockReturnValue(
         JSON.stringify({
           name: 'test-package',

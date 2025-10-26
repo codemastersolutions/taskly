@@ -79,7 +79,7 @@ export const defaultTestConfig: WorkflowTestConfig = {
  */
 export function createTestEnvironment(
   config: Partial<WorkflowTestConfig> = {}
-) {
+): WorkflowTestConfig {
   const finalConfig = { ...defaultTestConfig, ...config };
 
   // Set up GitHub Actions environment variables
@@ -102,7 +102,7 @@ export function createTestEnvironment(
 /**
  * Clean up test environment
  */
-export function cleanupTestEnvironment() {
+export function cleanupTestEnvironment(): void {
   const envVarsToClean = [
     'GITHUB_ACTIONS',
     'GITHUB_WORKSPACE',
@@ -128,7 +128,12 @@ export function cleanupTestEnvironment() {
 /**
  * Validate test environment
  */
-export function validateTestEnvironment(config: WorkflowTestConfig) {
+export function validateTestEnvironment(config: WorkflowTestConfig): {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  config: WorkflowTestConfig;
+} {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -161,43 +166,64 @@ export function validateTestEnvironment(config: WorkflowTestConfig) {
 /**
  * Mock GitHub Actions core functions
  */
-export function createGitHubActionsMocks() {
+export function createGitHubActionsMocks(): {
+  setOutput: (name: string, value: string) => void;
+  setFailed: (message: string) => void;
+  notice: (message: string) => void;
+  warning: (message: string) => void;
+  info: (message: string) => void;
+  debug: (message: string) => void;
+  group: (name: string, fn: () => void) => void;
+  summary: {
+    addHeading: (text: string) => { text: string };
+    addTable: (data: unknown[]) => { data: unknown[] };
+    write: () => Promise<void>;
+  };
+} {
   return {
-    setOutput: (name: string, value: string) => {
+    setOutput: (name: string, value: string): void => {
+      // eslint-disable-next-line no-console
       console.log(`::set-output name=${name}::${value}`);
     },
 
-    setFailed: (message: string) => {
+    setFailed: (message: string): void => {
+      // eslint-disable-next-line no-console
       console.log(`::error::${message}`);
       process.exitCode = 1;
     },
 
-    notice: (message: string) => {
+    notice: (message: string): void => {
+      // eslint-disable-next-line no-console
       console.log(`::notice::${message}`);
     },
 
-    warning: (message: string) => {
+    warning: (message: string): void => {
+      // eslint-disable-next-line no-console
       console.log(`::warning::${message}`);
     },
 
-    info: (message: string) => {
+    info: (message: string): void => {
+      // eslint-disable-next-line no-console
       console.log(message);
     },
 
-    debug: (message: string) => {
+    debug: (message: string): void => {
+      // eslint-disable-next-line no-console
       console.log(`::debug::${message}`);
     },
 
-    group: (name: string, fn: () => void) => {
+    group: (name: string, fn: () => void): void => {
+      // eslint-disable-next-line no-console
       console.log(`::group::${name}`);
       fn();
+      // eslint-disable-next-line no-console
       console.log('::endgroup::');
     },
 
     summary: {
-      addHeading: (text: string) => ({ text }),
-      addTable: (data: any[]) => ({ data }),
-      write: () => Promise.resolve(),
+      addHeading: (text: string): { text: string } => ({ text }),
+      addTable: (data: unknown[]): { data: unknown[] } => ({ data }),
+      write: (): Promise<void> => Promise.resolve(),
     },
   };
 }
@@ -207,7 +233,7 @@ export function createGitHubActionsMocks() {
  */
 export const testData = {
   // Generate mock commit messages
-  generateCommits: (count: number = 5) => {
+  generateCommits: (count: number = 5): string[] => {
     const types = ['feat', 'fix', 'docs', 'style', 'refactor', 'test', 'chore'];
     const scopes = ['auth', 'api', 'ui', 'core', 'utils'];
     const descriptions = [
@@ -233,7 +259,18 @@ export const testData = {
   },
 
   // Generate mock package.json
-  generatePackageJson: (version: string = '1.0.0') => ({
+  generatePackageJson: (
+    version: string = '1.0.0'
+  ): {
+    name: string;
+    version: string;
+    description: string;
+    main: string;
+    module: string;
+    types: string;
+    scripts: Record<string, string>;
+    devDependencies: Record<string, string>;
+  } => ({
     name: '@codemastersolutions/taskly',
     version,
     description:
@@ -256,7 +293,7 @@ export const testData = {
   }),
 
   // Generate mock workflow file content
-  generateWorkflowYaml: (name: string, trigger: string) => `
+  generateWorkflowYaml: (name: string, trigger: string): string => `
 name: ${name}
 on:
   ${trigger}:
@@ -277,12 +314,12 @@ jobs:
 `,
 
   // Generate mock git tags
-  generateGitTags: (count: number = 3) => {
+  generateGitTags: (count: number = 3): string[] => {
     return Array.from({ length: count }, (_, i) => `v1.${i}.0`);
   },
 
   // Generate mock SHAs
-  generateShas: (count: number = 5) => {
+  generateShas: (count: number = 5): string[] => {
     return Array.from({ length: count }, () => {
       // Generate a 40-character SHA by combining multiple random strings
       let sha = '';
@@ -303,7 +340,14 @@ export const workflowHelpers = {
     stepName: string,
     command: string,
     shouldFail: boolean = false
-  ) => {
+  ): Promise<{
+    name: string;
+    command: string;
+    success: boolean;
+    duration: number;
+    output?: string;
+    error?: string;
+  }> => {
     const startTime = Date.now();
 
     try {
@@ -336,7 +380,19 @@ export const workflowHelpers = {
   executeJob: async (
     jobName: string,
     steps: Array<{ name: string; command: string; shouldFail?: boolean }>
-  ) => {
+  ): Promise<{
+    name: string;
+    success: boolean;
+    duration: number;
+    steps: Array<{
+      name: string;
+      command: string;
+      success: boolean;
+      duration: number;
+      output?: string;
+      error?: string;
+    }>;
+  }> => {
     const startTime = Date.now();
     const results = [];
 
@@ -369,7 +425,24 @@ export const workflowHelpers = {
       name: string;
       steps: Array<{ name: string; command: string; shouldFail?: boolean }>;
     }>
-  ) => {
+  ): Promise<{
+    name: string;
+    success: boolean;
+    duration: number;
+    jobs: Array<{
+      name: string;
+      success: boolean;
+      duration: number;
+      steps: Array<{
+        name: string;
+        command: string;
+        success: boolean;
+        duration: number;
+        output?: string;
+        error?: string;
+      }>;
+    }>;
+  }> => {
     const startTime = Date.now();
     const results = [];
 

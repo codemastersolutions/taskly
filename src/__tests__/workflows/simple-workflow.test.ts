@@ -44,7 +44,9 @@ describe('Simple Workflow Tests', () => {
 
   describe('Version Management', () => {
     it('should parse semantic versions', () => {
-      const parseVersion = (version: string) => {
+      const parseVersion = (
+        version: string
+      ): { major: number; minor: number; patch: number } => {
         const cleanVersion = version.replace(/^v/, '');
         const parts = cleanVersion.split('.').map(Number);
 
@@ -64,7 +66,7 @@ describe('Simple Workflow Tests', () => {
       const incrementVersion = (
         version: string,
         type: 'major' | 'minor' | 'patch'
-      ) => {
+      ): string => {
         const parts = version.replace(/^v/, '').split('.').map(Number);
 
         switch (type) {
@@ -83,7 +85,15 @@ describe('Simple Workflow Tests', () => {
     });
 
     it('should analyze conventional commits', () => {
-      const analyzeCommits = (commits: string[]) => {
+      const analyzeCommits = (
+        commits: string[]
+      ): {
+        hasBreaking: boolean;
+        hasFeatures: boolean;
+        hasFixes: boolean;
+        conventional: string[];
+        skipped: string[];
+      } => {
         const pattern =
           /^(feat|fix|docs|style|refactor|test|chore)(\(.+\))?(!)?:\s*(.+)$/;
 
@@ -130,7 +140,16 @@ describe('Simple Workflow Tests', () => {
 
   describe('Workflow Simulation', () => {
     it('should simulate workflow step execution', async () => {
-      const executeStep = async (name: string, shouldFail = false) => {
+      const executeStep = async (
+        name: string,
+        shouldFail = false
+      ): Promise<{
+        name: string;
+        success: boolean;
+        duration: number;
+        output?: string;
+        error?: string;
+      }> => {
         const startTime = Date.now();
 
         // Simulate execution time
@@ -172,10 +191,18 @@ describe('Simple Workflow Tests', () => {
         'Build Project',
       ];
 
-      const results = [];
+      const results: Array<{
+        name: string;
+        success: boolean;
+        duration: number;
+      }> = [];
 
       for (const step of steps) {
-        const result = await new Promise(resolve => {
+        const result = await new Promise<{
+          name: string;
+          success: boolean;
+          duration: number;
+        }>(resolve => {
           setTimeout(() => {
             resolve({
               name: step,
@@ -189,7 +216,7 @@ describe('Simple Workflow Tests', () => {
       }
 
       expect(results).toHaveLength(6);
-      expect(results.every((r: any) => r.success)).toBe(true);
+      expect(results.every(r => r.success)).toBe(true);
     });
 
     it('should simulate auto-publish workflow', async () => {
@@ -200,10 +227,15 @@ describe('Simple Workflow Tests', () => {
         'GitHub Release',
       ];
 
-      const results = [];
+      const results: Array<{ name: string; success: boolean; steps: number }> =
+        [];
 
       for (const job of jobs) {
-        const result = await new Promise(resolve => {
+        const result = await new Promise<{
+          name: string;
+          success: boolean;
+          steps: number;
+        }>(resolve => {
           setTimeout(() => {
             resolve({
               name: job,
@@ -217,27 +249,31 @@ describe('Simple Workflow Tests', () => {
       }
 
       expect(results).toHaveLength(4);
-      expect(results.every((r: any) => r.success)).toBe(true);
+      expect(results.every(r => r.success)).toBe(true);
     });
   });
 
   describe('GitHub Actions Helpers', () => {
     it('should provide GitHub Actions core functions', () => {
       const core = {
-        setOutput: (name: string, value: string) => {
+        setOutput: (name: string, value: string): void => {
+          // eslint-disable-next-line no-console
           console.log(`::set-output name=${name}::${value}`);
         },
 
-        setFailed: (message: string) => {
+        setFailed: (message: string): void => {
+          // eslint-disable-next-line no-console
           console.log(`::error::${message}`);
           process.exitCode = 1;
         },
 
-        notice: (message: string) => {
+        notice: (message: string): void => {
+          // eslint-disable-next-line no-console
           console.log(`::notice::${message}`);
         },
 
-        warning: (message: string) => {
+        warning: (message: string): void => {
+          // eslint-disable-next-line no-console
           console.log(`::warning::${message}`);
         },
       };
@@ -257,7 +293,7 @@ describe('Simple Workflow Tests', () => {
       const originalExitCode = process.exitCode;
 
       const core = {
-        setFailed: (message: string) => {
+        setFailed: (message: string): { failed: boolean; message: string } => {
           process.exitCode = 1;
           return { failed: true, message };
         },
@@ -275,7 +311,7 @@ describe('Simple Workflow Tests', () => {
 
   describe('Test Data Generation', () => {
     it('should generate mock commit messages', () => {
-      const generateCommits = (count: number) => {
+      const generateCommits = (count: number): string[] => {
         const types = ['feat', 'fix', 'docs', 'chore'];
         const descriptions = [
           'add feature',
@@ -297,7 +333,18 @@ describe('Simple Workflow Tests', () => {
     });
 
     it('should generate mock package.json', () => {
-      const generatePackageJson = (version: string) => ({
+      const generatePackageJson = (
+        version: string
+      ): {
+        name: string;
+        version: string;
+        description: string;
+        main: string;
+        scripts: {
+          test: string;
+          build: string;
+        };
+      } => ({
         name: '@codemastersolutions/taskly',
         version,
         description: 'Test package',
@@ -315,7 +362,7 @@ describe('Simple Workflow Tests', () => {
     });
 
     it('should generate mock git SHAs', () => {
-      const generateShas = (count: number) => {
+      const generateShas = (count: number): string[] => {
         return Array.from({ length: count }, () =>
           Math.random().toString(36).substr(2, 40)
         );
@@ -329,7 +376,7 @@ describe('Simple Workflow Tests', () => {
 
   describe('Workflow Configuration', () => {
     it('should validate workflow YAML structure', () => {
-      const generateWorkflow = (name: string, trigger: string) => `
+      const generateWorkflow = (name: string, trigger: string): string => `
 name: ${name}
 on:
   ${trigger}:
@@ -364,7 +411,7 @@ jobs:
       process.env.GITHUB_WORKSPACE = '/workspace';
       process.env.GITHUB_REPOSITORY = 'owner/repo';
 
-      const validateEnv = () => {
+      const validateEnv = (): { valid: boolean; missing: string[] } => {
         const missing = requiredVars.filter(varName => !process.env[varName]);
         return { valid: missing.length === 0, missing };
       };

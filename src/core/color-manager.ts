@@ -128,7 +128,7 @@ export class ColorManager {
       return content;
     }
 
-    const displayPrefix = prefix || identifier;
+    const displayPrefix = prefix ?? identifier;
     const coloredPrefix = `${assignment.ansiCode}[${displayPrefix}]${ANSI_RESET}`;
 
     return `${coloredPrefix} ${content}`;

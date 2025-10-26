@@ -293,7 +293,7 @@ export class PackageManagerDetector {
       // Try to determine which PM the custom path represents
       // This is a best-effort attempt based on the path
       const pmFromPath = this.detectPMFromPath(customPath);
-      const finalPM = preferredPM || pmFromPath || 'npm';
+      const finalPM = preferredPM ?? pmFromPath ?? 'npm';
 
       return {
         pm: finalPM,

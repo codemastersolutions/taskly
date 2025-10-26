@@ -41,7 +41,7 @@ export function setupTestEnvironment(
   const defaultConfig: WorkflowTestConfig = {
     environment: {
       workspaceRoot: process.cwd(),
-      githubWorkspace: process.env.GITHUB_WORKSPACE || process.cwd(),
+      githubWorkspace: process.env.GITHUB_WORKSPACE ?? process.cwd(),
       nodeVersion: process.version,
       npmVersion: 'unknown',
       gitRepository: 'test/repo',
@@ -90,7 +90,7 @@ export function validateTestEnvironment(
   const environment = skipSetup
     ? {
         workspaceRoot: process.cwd(),
-        githubWorkspace: process.env.GITHUB_WORKSPACE || process.cwd(),
+        githubWorkspace: process.env.GITHUB_WORKSPACE ?? process.cwd(),
         nodeVersion: process.version,
         npmVersion: 'unknown',
         gitRepository: 'test/repo',
@@ -215,7 +215,13 @@ export function createMockGitHubEnvironment(
     runId?: string;
     actor?: string;
   } = {}
-) {
+): {
+  repository: string;
+  branch: string;
+  sha: string;
+  runId: string;
+  actor: string;
+} {
   const defaults = {
     repository: 'owner/repo',
     branch: 'main',
@@ -322,7 +328,7 @@ export function validateWorkflowFiles(
 /**
  * Clean up test environment
  */
-export function cleanupTestEnvironment() {
+export function cleanupTestEnvironment(): void {
   // Remove test-specific environment variables
   const testEnvVars = [
     'GITHUB_ACTIONS',
@@ -345,7 +351,7 @@ export function cleanupTestEnvironment() {
 /**
  * Create test fixtures for workflow validation
  */
-export function createTestFixtures(tempDir: string) {
+export function createTestFixtures(tempDir: string): void {
   // Create basic package.json
   const packageJson = {
     name: 'test-package',
@@ -411,7 +417,19 @@ jobs:
 export function simulateWorkflowExecution(
   workflowName: string,
   jobName: string
-) {
+): {
+  environment: {
+    repository: string;
+    branch: string;
+    sha: string;
+    runId: string;
+    actor: string;
+  };
+  setOutput: (name: string, value: string) => void;
+  setFailed: (message: string) => void;
+  notice: (message: string) => void;
+  warning: (message: string) => void;
+} {
   const environment = createMockGitHubEnvironment();
 
   // Set workflow-specific environment variables
@@ -422,19 +440,23 @@ export function simulateWorkflowExecution(
 
   return {
     environment,
-    setOutput: (name: string, value: string) => {
+    setOutput: (name: string, value: string): void => {
       // Simulate GitHub Actions output
+      // eslint-disable-next-line no-console
       console.log(`::set-output name=${name}::${value}`);
     },
-    setFailed: (message: string) => {
+    setFailed: (message: string): void => {
       // Simulate GitHub Actions failure
+      // eslint-disable-next-line no-console
       console.log(`::error::${message}`);
       process.exitCode = 1;
     },
-    notice: (message: string) => {
+    notice: (message: string): void => {
+      // eslint-disable-next-line no-console
       console.log(`::notice::${message}`);
     },
-    warning: (message: string) => {
+    warning: (message: string): void => {
+      // eslint-disable-next-line no-console
       console.log(`::warning::${message}`);
     },
   };

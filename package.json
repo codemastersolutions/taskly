@@ -19,9 +19,16 @@
     "npm",
     "yarn",
     "pnpm",
-    "bun"
+    "bun",
+    "codemastersolutions",
+    "codemaster solutions",
+    "codemaster",
+    "codemastersolucoes",
+    "codemaster solucoes",
+    "solutions",
+    "solucoes"
   ],
-  "author": "Your Name",
+  "author": "Gilson Gabriel",
   "license": "MIT",
   "repository": {
     "type": "git",

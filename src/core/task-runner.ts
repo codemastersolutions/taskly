@@ -100,14 +100,14 @@ export class TaskRunner extends EventEmitter {
         ?.map(t => t.color)
         .filter((color): color is string => Boolean(color))
     );
-    this.shouldKillOthersOnFail = options?.killOthersOnFail || false;
-    this.maxConcurrency = options?.maxConcurrency || Infinity;
-    this.retryFailedTasks = options?.retryFailedTasks || false;
-    this.maxRetries = options?.maxRetries || 3;
-    this.retryDelay = options?.retryDelay || 1000;
-    this.continueOnError = options?.continueOnError || false;
-    this.taskTimeout = options?.taskTimeout || 300000;
-    this.globalTimeout = options?.globalTimeout || 1800000;
+    this.shouldKillOthersOnFail = options?.killOthersOnFail ?? false;
+    this.maxConcurrency = options?.maxConcurrency ?? Infinity;
+    this.retryFailedTasks = options?.retryFailedTasks ?? false;
+    this.maxRetries = options?.maxRetries ?? 3;
+    this.retryDelay = options?.retryDelay ?? 1000;
+    this.continueOnError = options?.continueOnError ?? false;
+    this.taskTimeout = options?.taskTimeout ?? 300000;
+    this.globalTimeout = options?.globalTimeout ?? 1800000;
 
     // Set up dependencies if provided
     if (options?.dependencies) {
@@ -299,7 +299,7 @@ export class TaskRunner extends EventEmitter {
 
       // Generate or use provided identifier
       const identifier =
-        task.identifier || this.generateTaskIdentifier(task, i);
+        task.identifier ?? this.generateTaskIdentifier(task, i);
 
       // Ensure unique identifiers
       if (identifiers.has(identifier)) {
@@ -316,12 +316,13 @@ export class TaskRunner extends EventEmitter {
         try {
           const resolved = PackageManagerDetector.resolve(
             task.packageManager,
-            task.cwd || process.cwd()
+            task.cwd ?? process.cwd()
           );
           resolvedPackageManager = resolved.pm;
 
           // Log fallback if different from requested
           if (resolved.source !== 'preferred') {
+            // eslint-disable-next-line no-console
             console.warn(
               `⚠️  Package manager '${task.packageManager}' not available for task "${identifier}", using '${resolved.pm}' instead (${resolved.source})`
             );
@@ -344,7 +345,7 @@ export class TaskRunner extends EventEmitter {
         config: {
           ...task,
           identifier,
-          packageManager: resolvedPackageManager || task.packageManager,
+          packageManager: resolvedPackageManager ?? task.packageManager,
         },
         identifier,
         status: 'pending',
@@ -461,8 +462,8 @@ export class TaskRunner extends EventEmitter {
         packageManagerInfo,
         cwd: taskState.config.cwd,
         color: this.colorManager.getAssignment(taskState.identifier)?.color,
-        dependencies: this.dependencies.get(taskState.identifier) || [],
-        retryAttempt: this.retryCount.get(taskState.identifier) || 0,
+        dependencies: this.dependencies.get(taskState.identifier) ?? [],
+        retryAttempt: this.retryCount.get(taskState.identifier) ?? 0,
       });
 
       // Start the process
@@ -499,7 +500,7 @@ export class TaskRunner extends EventEmitter {
       // Validate and resolve package manager
       const resolved = PackageManagerDetector.resolve(
         config.packageManager,
-        config.cwd || process.cwd()
+        config.cwd ?? process.cwd()
       );
 
       // Get package manager info
@@ -572,10 +573,10 @@ export class TaskRunner extends EventEmitter {
       ...process.env,
 
       // Add Taskly-specific environment variables
-      TASKLY_TASK_ID: config.identifier || '',
+      TASKLY_TASK_ID: config.identifier ?? '',
       TASKLY_TASK_COMMAND: config.command,
-      TASKLY_TASK_CWD: config.cwd || process.cwd(),
-      TASKLY_PACKAGE_MANAGER: config.packageManager || 'npm',
+      TASKLY_TASK_CWD: config.cwd ?? process.cwd(),
+      TASKLY_PACKAGE_MANAGER: config.packageManager ?? 'npm',
 
       // Security: Remove potentially dangerous environment variables
       // These will be deleted below
@@ -587,7 +588,7 @@ export class TaskRunner extends EventEmitter {
 
     // Add color information if available
     const colorAssignment = this.colorManager.getAssignment(
-      config.identifier || ''
+      config.identifier ?? ''
     );
     if (colorAssignment) {
       env.TASKLY_TASK_COLOR = colorAssignment.color;
@@ -623,11 +624,11 @@ export class TaskRunner extends EventEmitter {
         identifier,
         result,
         duration: result.duration,
-        retries: this.retryCount.get(identifier) || 0,
+        retries: this.retryCount.get(identifier) ?? 0,
       });
 
       // Notify dependent tasks that this task is complete
-      const dependents = this.dependents.get(identifier) || [];
+      const dependents = this.dependents.get(identifier) ?? [];
       if (dependents.length > 0) {
         this.emit('task:dependencies-satisfied', {
           identifier,
@@ -681,14 +682,14 @@ export class TaskRunner extends EventEmitter {
           this.emit('task:error', {
             identifier,
             error: tasklyError,
-            retries: this.retryCount.get(identifier) || 0,
+            retries: this.retryCount.get(identifier) ?? 0,
           });
         }
       } else {
         this.emit('task:error', {
           identifier,
           error: tasklyError,
-          retries: this.retryCount.get(identifier) || 0,
+          retries: this.retryCount.get(identifier) ?? 0,
         });
       }
 
@@ -724,7 +725,7 @@ export class TaskRunner extends EventEmitter {
     this.emit('task:error', {
       identifier: taskState.identifier,
       error: tasklyError,
-      retries: this.retryCount.get(taskState.identifier) || 0,
+      retries: this.retryCount.get(taskState.identifier) ?? 0,
     });
 
     // Handle failure with retry logic
@@ -749,7 +750,7 @@ export class TaskRunner extends EventEmitter {
     });
 
     // Kill all other running tasks
-    const killPromises = tasksToKill.map(async identifier => {
+    const killPromises = tasksToKill.map(identifier => {
       const taskState = this.tasks.get(identifier);
       if (taskState) {
         taskState.status = 'killed';
@@ -759,7 +760,7 @@ export class TaskRunner extends EventEmitter {
         this.killedTasks.add(identifier);
       }
 
-      await this.processManager.terminate(identifier, 'SIGKILL');
+      this.processManager.terminate(identifier, 'SIGKILL');
     });
 
     // Clear task queue
@@ -866,7 +867,7 @@ export class TaskRunner extends EventEmitter {
         result = {
           ...taskState.result,
           // Add retry information to the result
-          retries: this.retryCount.get(taskState.identifier) || 0,
+          retries: this.retryCount.get(taskState.identifier) ?? 0,
         } as TaskResult & { retries: number };
       } else {
         // Create a result for tasks that didn't complete normally
@@ -875,10 +876,10 @@ export class TaskRunner extends EventEmitter {
           exitCode: this.getExitCodeForStatus(taskState.status),
           output: this.processManager.getOutput(taskState.identifier) || [],
           duration: this.calculateTaskDuration(taskState),
-          startTime: taskState.startTime || Date.now(),
-          endTime: taskState.endTime || Date.now(),
+          startTime: taskState.startTime ?? Date.now(),
+          endTime: taskState.endTime ?? Date.now(),
           error: this.getErrorMessageForStatus(taskState.status),
-          retries: this.retryCount.get(taskState.identifier) || 0,
+          retries: this.retryCount.get(taskState.identifier) ?? 0,
         } as TaskResult & { retries: number };
       }
 
@@ -975,7 +976,7 @@ export class TaskRunner extends EventEmitter {
     results: TaskResult[]
   ): { identifier: string; duration: number } | undefined {
     const longest = results.reduce(
-      (max, result) => (result.duration > (max?.duration || 0) ? result : max),
+      (max, result) => (result.duration > (max?.duration ?? 0) ? result : max),
       undefined as TaskResult | undefined
     );
 
@@ -995,7 +996,7 @@ export class TaskRunner extends EventEmitter {
     );
     const shortest = completedResults.reduce(
       (min, result) =>
-        result.duration < (min?.duration || Infinity) ? result : min,
+        result.duration < (min?.duration ?? Infinity) ? result : min,
       undefined as TaskResult | undefined
     );
 
@@ -1070,7 +1071,7 @@ export class TaskRunner extends EventEmitter {
           },
           taskInfo: {
             status: this.tasks.get(identifier)?.status,
-            retries: this.retryCount.get(identifier) || 0,
+            retries: this.retryCount.get(identifier) ?? 0,
           },
         });
       }
@@ -1083,7 +1084,7 @@ export class TaskRunner extends EventEmitter {
         this.emit('task:timeout', {
           identifier,
           timeout,
-          retries: this.retryCount.get(identifier) || 0,
+          retries: this.retryCount.get(identifier) ?? 0,
         });
       }
     );
@@ -1190,7 +1191,7 @@ export class TaskRunner extends EventEmitter {
         if (!this.dependents.has(dependency)) {
           this.dependents.set(dependency, []);
         }
-        this.dependents.get(dependency)!.push(dep.identifier);
+        this.dependents.get(dependency)?.push(dep.identifier);
       }
     }
   }
@@ -1222,7 +1223,7 @@ export class TaskRunner extends EventEmitter {
 
       visiting.add(identifier);
 
-      const dependencies = this.dependencies.get(identifier) || [];
+      const dependencies = this.dependencies.get(identifier) ?? [];
       for (const dep of dependencies) {
         if (taskMap.has(dep)) {
           visit(dep);
@@ -1296,7 +1297,7 @@ export class TaskRunner extends EventEmitter {
    * Retry a failed task
    */
   private async retryTask(taskState: TaskState): Promise<boolean> {
-    const currentRetries = this.retryCount.get(taskState.identifier) || 0;
+    const currentRetries = this.retryCount.get(taskState.identifier) ?? 0;
 
     if (currentRetries >= this.maxRetries) {
       return false;
@@ -1361,7 +1362,7 @@ export class TaskRunner extends EventEmitter {
       error instanceof TasklyError
         ? error
         : new TasklyError(
-            `Task "${taskState.identifier}" failed after ${this.retryCount.get(taskState.identifier) || 0} retries: ${error instanceof Error ? error.message : String(error)}`,
+            `Task "${taskState.identifier}" failed after ${this.retryCount.get(taskState.identifier) ?? 0} retries: ${error instanceof Error ? error.message : String(error)}`,
             ERROR_CODES.TASK_FAILED,
             { taskId: taskState.identifier },
             error instanceof Error ? error : undefined
@@ -1370,7 +1371,7 @@ export class TaskRunner extends EventEmitter {
     this.emit('task:failed-permanently', {
       identifier: taskState.identifier,
       error: tasklyError,
-      retries: this.retryCount.get(taskState.identifier) || 0,
+      retries: this.retryCount.get(taskState.identifier) ?? 0,
     });
 
     // Handle kill-others-on-fail (only if not continuing on error)
@@ -1432,7 +1433,7 @@ export class TaskRunner extends EventEmitter {
       retriedTasks,
       averageRetries: retriedTasks > 0 ? totalRetries / retriedTasks : 0,
       executionTime: this.isRunning
-        ? Date.now() - (this.getEarliestStartTime() || Date.now())
+        ? Date.now() - (this.getEarliestStartTime() ?? Date.now())
         : 0,
     };
   }
@@ -1471,7 +1472,7 @@ export class TaskRunner extends EventEmitter {
     this.currentConcurrency--;
     this.killedTasks.add(identifier);
 
-    const killed = await this.processManager.terminate(identifier, signal);
+    const killed = this.processManager.terminate(identifier, signal);
 
     if (killed) {
       this.emit('task:killed', {
@@ -1519,12 +1520,12 @@ export class TaskRunner extends EventEmitter {
 
       return {
         identifier,
-        command: taskState?.config.command || 'Unknown',
-        error: result?.error || 'Unknown error',
-        exitCode: result?.exitCode || 1,
-        retries: this.retryCount.get(identifier) || 0,
-        duration: result?.duration || 0,
-        output: result?.output || [],
+        command: taskState?.config.command ?? 'Unknown',
+        error: result?.error ?? 'Unknown error',
+        exitCode: result?.exitCode ?? 1,
+        retries: this.retryCount.get(identifier) ?? 0,
+        duration: result?.duration ?? 0,
+        output: result?.output ?? [],
       };
     });
 
@@ -1533,10 +1534,11 @@ export class TaskRunner extends EventEmitter {
 
       return {
         identifier,
-        command: taskState?.config.command || 'Unknown',
+        command: taskState?.config.command ?? 'Unknown',
         error: 'Task was killed',
         exitCode: 130,
-        retries: this.retryCount.get(identifier) || 0,
+        retries: this.retryCount.get(identifier) ?? 0,
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         duration: this.calculateTaskDuration(taskState!),
         output: this.processManager.getOutput(identifier) || [],
       };

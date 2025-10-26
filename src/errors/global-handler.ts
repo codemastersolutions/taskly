@@ -80,6 +80,7 @@ export class GlobalErrorHandler extends EventEmitter {
       logFilePath: './taskly-errors.log',
       maxLogEntries: 1000,
       exitOnCriticalError: true,
+      // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
       errorReporter: () => {}, // Default no-op reporter
       shutdownTimeout: 10000, // 10 seconds
       enableRecovery: true,
@@ -537,6 +538,7 @@ export class GlobalErrorHandler extends EventEmitter {
     // This is a simplified file logging implementation
     // In a production environment, you might want to use a proper logging library
     try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const fs = require('fs');
       const timestamp = new Date(entry.timestamp).toISOString();
       const level = entry.level.toUpperCase();

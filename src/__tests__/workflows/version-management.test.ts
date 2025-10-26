@@ -244,11 +244,6 @@ describe('Version Management Script', () => {
       mockFs.existsSync.mockReturnValue(false);
       mockFs.writeFileSync.mockImplementation(() => {});
 
-      // Mock the generateChangelogEntry function
-      const _mockGenerateChangelogEntry = vi
-        .fn()
-        .mockReturnValue('## 1.1.0\n\n### Features\n\n- add new feature\n');
-
       versionManagement.updateChangelog(mockAnalysis, '1.1.0');
 
       expect(mockFs.writeFileSync).toHaveBeenCalled();

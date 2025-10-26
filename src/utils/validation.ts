@@ -484,6 +484,7 @@ export function validateCLIOptions(options: CLIOptions): ValidationResult {
 export function createValidationError(
   message: string,
   field?: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _value?: unknown
 ): TasklyError {
   const fullMessage = field

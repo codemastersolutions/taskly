@@ -137,7 +137,14 @@ BREAKING CHANGE: The old API has been removed`;
         hasBreakingChanges: false,
         hasFeatures: false,
         hasFixes: false,
-        conventionalCommits: [{ type: 'docs' } as any],
+        conventionalCommits: [
+          {
+            type: 'docs' as const,
+            description: 'update documentation',
+            isBreaking: false,
+            raw: 'docs: update documentation',
+          },
+        ],
         skippedCommits: [],
       };
 
