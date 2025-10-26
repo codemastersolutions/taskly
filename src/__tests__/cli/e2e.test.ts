@@ -439,45 +439,51 @@ killOthersOnFail: false
   });
 
   describe('Signal Handling', () => {
-    it('should handle SIGINT gracefully', done => {
+    it('should handle SIGINT gracefully', async () => {
       if (!existsSync(cliPath)) {
         console.warn('CLI binary not found, skipping E2E test');
-        done();
         return;
       }
 
       const sleepTime =
         platform() === 'win32' ? 'timeout /t 5 >nul' : 'sleep 5';
-      const child = spawn('node', [cliPath, sleepTime], {
-        cwd: tempDir,
-        stdio: 'pipe',
+
+      return new Promise<void>((resolve, reject) => {
+        const child = spawn('node', [cliPath, sleepTime], {
+          cwd: tempDir,
+          stdio: 'pipe',
+        });
+
+        let output = '';
+        child.stdout.on('data', data => {
+          output += data.toString();
+        });
+
+        child.stderr.on('data', data => {
+          output += data.toString();
+        });
+
+        // Send SIGINT after a short delay
+        setTimeout(() => {
+          child.kill('SIGINT');
+        }, 1000);
+
+        child.on('exit', code => {
+          try {
+            expect(code).not.toBe(0); // Should exit with non-zero code
+            expect(output).toContain('🛑'); // Should show stopping message
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
+
+        // Timeout safety
+        setTimeout(() => {
+          child.kill('SIGKILL');
+          reject(new Error('Test timeout'));
+        }, 10000);
       });
-
-      let output = '';
-      child.stdout.on('data', data => {
-        output += data.toString();
-      });
-
-      child.stderr.on('data', data => {
-        output += data.toString();
-      });
-
-      // Send SIGINT after a short delay
-      setTimeout(() => {
-        child.kill('SIGINT');
-      }, 1000);
-
-      child.on('exit', code => {
-        expect(code).not.toBe(0); // Should exit with non-zero code
-        expect(output).toContain('🛑'); // Should show stopping message
-        done();
-      });
-
-      // Timeout safety
-      setTimeout(() => {
-        child.kill('SIGKILL');
-        done(new Error('Test timeout'));
-      }, 10000);
     });
   });
 });

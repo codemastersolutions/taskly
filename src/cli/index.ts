@@ -513,7 +513,7 @@ export class TasklyCLI {
    * Generate task identifier from command
    */
   private generateIdentifier(command: string, index: number): string {
-    const commandName = command.trim().split(/\s+/)[0];
+    const commandName = command.trim();
 
     // Extract just the filename from paths (handle both Unix and Windows paths)
     let fileName = commandName;
@@ -522,8 +522,14 @@ export class TasklyCLI {
       fileName = parts[parts.length - 1] || commandName;
     }
 
-    // Remove only the final file extension (not all dots)
-    const baseName = fileName.replace(/\.[^.]*$/, '');
+    // Now split by spaces to get the first part (executable name)
+    const executableName = fileName.split(/\s+/)[0];
+
+    // Remove file extensions (handle multiple extensions like .tar.gz)
+    // Find the first dot and remove everything after it
+    const dotIndex = executableName.indexOf('.');
+    const baseName =
+      dotIndex !== -1 ? executableName.substring(0, dotIndex) : executableName;
 
     // Remove special characters but keep alphanumeric
     const sanitized = baseName.replace(/[^a-zA-Z0-9]/g, '');

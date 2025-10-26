@@ -9,6 +9,7 @@ import { ERROR_CODES, PackageManager, TasklyError } from '../types/index.js';
 export class PackageManagerDetector {
   private static readonly LOCK_FILE_MAP: Record<string, PackageManager> = {
     'package-lock.json': 'npm',
+    'npm-shrinkwrap.json': 'npm',
     'yarn.lock': 'yarn',
     'pnpm-lock.yaml': 'pnpm',
     'bun.lockb': 'bun',
