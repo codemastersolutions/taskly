@@ -18,12 +18,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: "pnpm"
-
       - name: Enable Corepack
         run: corepack enable
 
@@ -31,8 +25,12 @@ jobs:
         uses: pnpm/action-setup@v4
         with:
           version: 10
-      - name: Verify pnpm
-        run: pnpm -v
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
