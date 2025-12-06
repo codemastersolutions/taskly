@@ -29,6 +29,9 @@ jobs:
         with:
           version: 10
 
+      - name: Verify pnpm
+        run: pnpm -v
+
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
