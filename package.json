@@ -15,7 +15,7 @@
   },
   "packageManager": "pnpm@10.0.0",
   "engines": {
-    "node": ">=16"
+    "node": ">=18"
   },
   "sideEffects": false,
   "files": [
