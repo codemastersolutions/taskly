@@ -4,7 +4,7 @@
   "description": "Zero-deps concurrent command runner and CLI (npm/yarn/pnpm/bun/shell/powershell/cmd/bat)",
   "type": "module",
   "license": "MIT",
-  "author": "CodeMaster Solutions",
+  "author": "CodeMaster Soluções",
   "repository": {
     "type": "git",
     "url": "https://github.com/codemastersolutions/taskly.git"
@@ -15,7 +15,7 @@
   },
   "packageManager": "pnpm@10.0.0",
   "engines": {
-    "node": ">=16"
+    "node": ">=18"
   },
   "sideEffects": false,
   "files": [

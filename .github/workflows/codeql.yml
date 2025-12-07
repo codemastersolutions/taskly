@@ -1,4 +1,4 @@
-name: 'CodeQL'
+name: "CodeQL"
 
 on:
   pull_request:
@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        node-version: [16.x, 18.x, 20.x, 24.x]
+        node-version: [18.x, 20.x, 24.x]
     permissions:
       actions: read
       contents: read
@@ -19,22 +19,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'pnpm'
+          cache: "pnpm"
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: javascript
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
-      - name: Build
-        run: pnpm build
+      - name: Build (prod)
+        run: pnpm build:prod
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
