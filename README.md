@@ -1,14 +1,38 @@
 # @codemastersolutions/taskly
 
-Zero-dependencies concurrent command runner and CLI, compatible with Node >= 16, built in TypeScript. It can run npm, yarn, pnpm, bun and shell scripts.
+Executor concorrente de comandos e CLI sem dependências, compatível com Node >= 16, escrito em TypeScript. Roda comandos de `npm`, `yarn`, `pnpm`, `bun` e scripts de shell.
 
-## Install
+## Instalação
 
 ```bash
 pnpm add @codemastersolutions/taskly -D
 ```
 
-## CLI Usage
+## Exemplos rápidos
+
+Comandos essenciais para começar:
+
+```bash
+# Dois processos em paralelo usando atalhos de package manager
+taskly npm:start pnpm:build
+
+# Nomear processos e prefixar pela propriedade 'name'
+taskly --names api,web --prefix name "pnpm dev:api" "pnpm dev:web"
+
+# Política: derruba ao primeiro erro e só considera sucesso se todos forem 0
+taskly --kill-others-on failure --success-condition all "pnpm build" "pnpm test"
+
+# Saída crua, sem prefixos/cores
+taskly --raw "pnpm build" "pnpm test"
+
+# Executar via shell (útil para comandos com espaços/expansões do shell)
+taskly --shell "pnpm dev:api" "pnpm dev:web"
+
+# Encaminhar argumentos para scripts com '--'
+taskly "npm:start -- --watch" "pnpm:build -- --filter @app/web"
+```
+
+## Uso via CLI
 
 ```bash
 taskly --max-processes 2 --prefix name --kill-others-on failure \
@@ -16,17 +40,17 @@ taskly --max-processes 2 --prefix name --kill-others-on failure \
   "pnpm test"
 ```
 
-Options:
+Opções:
 
-- `--names name1,name2` Assign names by index.
-- `--max-processes N` Limit parallelism.
-- `--kill-others-on success,failure` Kill others when a process succeeds/fails.
-- `--prefix type|template` `index|pid|time|command|name|none` or custom template with `{index}`, `{pid}`, `{time}`, `{command}`, `{name}`.
-- `--success-condition all|first|last` Run success policy.
-- `--raw` Disable prefixing/colors.
-- `--shell` Use system shell (less secure).
-- `--shell [name]` Run via shell executable: `cmd|powershell|pwsh|bash|sh` (default system shell).
-- `--cwd PATH` Working directory.
+- `--names name1,name2` Atribui nomes por índice.
+- `--max-processes N` Limita o paralelismo.
+- `--kill-others-on success,failure` Encerra os demais quando um processo tiver sucesso/falha.
+- `--prefix type|template` `index|pid|time|command|name|none` ou template customizado com `{index}`, `{pid}`, `{time}`, `{command}`, `{name}`.
+- `--success-condition all|first|last` Define a política de sucesso.
+- `--raw` Desativa prefixos/cores.
+- `--shell` Usa o shell do sistema (menos seguro).
+- `--shell [name]` Executa via shell: `cmd|powershell|pwsh|bash|sh` (padrão: shell do sistema).
+- `--cwd PATH` Diretório de trabalho.
 
 ### Atalho de Package Manager (`<pm>:<cmd>`)
 
@@ -387,7 +411,20 @@ Notas:
 - As flags podem ser combinadas. Ex.: `--kill-others-on failure --success-condition all` derruba os demais no primeiro erro e só reporta sucesso se todos concluírem com `0`.
 - Quando encerra os demais, envia `SIGTERM` e (se necessário) `SIGKILL` após um pequeno atraso em Unix. No Windows, o encerramento respeita a semântica do Node.
 
-## Programmatic Usage (API)
+## Glossário de termos
+
+- `prefix` (prefixo): texto exibido antes de cada linha de saída do processo. Pode ser um tipo (`index`, `pid`, `time`, `command`, `name`, `none`) ou um template.
+- Template de prefixo: string com placeholders para montar o prefixo, ex.: `"[{time}] [{pid}] {name}: "`.
+- Placeholders: variáveis suportadas em templates de prefixo: `{index}`, `{pid}`, `{time}`, `{command}`, `{name}`.
+- `raw` (modo cru): desativa prefixos e cores; útil para depuração de saída sem formatação.
+- `success-condition` (política de sucesso): define quando o conjunto é considerado bem-sucedido: `all`, `first` ou `last`.
+- `kill-others-on`: encerra os processos restantes quando ocorre `success` e/ou `failure` em qualquer processo.
+- `cwd` (diretório de trabalho): caminho de execução do processo. Pode ser global ou por comando.
+- `shell`: executa o comando via shell (`cmd`, `powershell`, `pwsh`, `bash`, `sh`) ou o shell padrão quando `true`.
+- `prefixColor` / `prefixColors`: cor do prefixo por comando ou lista de cores por índice. Suporta nomes ANSI (`blue`, `magenta`), hex (`#RRGGBB`) e `rgb(r,g,b)`.
+- `timestampFormat`: formatação do `{time}` no prefixo, ex.: `"yyyy-MM-dd HH:mm:ss.SSS"`.
+
+## Uso Programático (API)
 
 Tipos principais e opções (TypeScript):
 
@@ -500,15 +537,15 @@ Notas:
 - Em terminais sem suporte a truecolor, o comportamento é degradado e a saída pode aparecer sem cores.
 - Formatos suportados: nomes ANSI, hex, `rgb(r,g,b)` e `auto`. Não há temas nomeados além dos nomes ANSI.
 
-## Security
+## Segurança
 
-- Shell mode is disabled by default to reduce injection risk. Use `--shell` or `shell: true` only when needed.
-- GitHub Actions include CodeQL analysis and `pnpm audit` checks.
+- O modo shell é desativado por padrão para reduzir risco de injeção. Use `--shell` ou `shell: true` apenas quando necessário.
+- O GitHub Actions inclui análise CodeQL e checagens com `pnpm audit`.
 
-## Publishing
+## Publicação
 
-Publishing is automated via GitHub Actions and only occurs when a pull request into `main` is merged successfully and CI checks pass. The workflow bumps the version, creates a tag and GitHub release, and publishes only `dist` and essential files to npm.
+A publicação é automatizada via GitHub Actions e ocorre apenas quando um pull request para `main` é mesclado com sucesso e os checks de CI passam. O workflow atualiza a versão, cria a tag e o release no GitHub, e publica somente `dist` e arquivos essenciais no npm.
 
-## License
+## Licença
 
 MIT
