@@ -28,6 +28,38 @@ Options:
 - `--shell [name]` Run via shell executable: `cmd|powershell|pwsh|bash|sh` (default system shell).
 - `--cwd PATH` Working directory.
 
+### Atalho de Package Manager (`<pm>:<cmd>`)
+
+Taskly aceita tokens no formato `<package manager>:<comando>` e os expande para `run` automaticamente:
+
+```bash
+# Expansões suportadas
+taskly npm:start pnpm:build yarn:test bun:dev
+# Equivalentes:
+# npm:start -> npm run start
+# pnpm:build -> pnpm run build
+# yarn:test -> yarn run test
+# bun:dev   -> bun run dev
+
+# Passando argumentos para o script
+taskly "npm:start -- --watch" "pnpm:build -- --filter @app/web"
+```
+
+Notas:
+
+- Compatível com os principais package managers: `npm`, `pnpm`, `yarn`, `bun`.
+- Para o Yarn usamos `yarn run` por compatibilidade entre versões.
+- Use aspas para preservar espaços e `--` para encaminhar argumentos ao script do package manager.
+
+#### Tabela rápida de mapeamentos
+
+| Atalho          | Expansão            |
+| --------------- | ------------------- |
+| `npm:<script>`  | `npm run <script>`  |
+| `pnpm:<script>` | `pnpm run <script>` |
+| `yarn:<script>` | `yarn run <script>` |
+| `bun:<script>`  | `bun run <script>`  |
+
 ## Exemplo em package.json (pnpm)
 
 Defina um script que roda dois processos em paralelo com nomes, limite de paralelismo, e finaliza todos ao primeiro erro:
@@ -46,6 +78,73 @@ Defina um script que roda dois processos em paralelo com nomes, limite de parale
 - `--kill-others-on failure` derruba o outro processo se qualquer um falhar.
 - `--shell` permite passar o comando completo como string (útil para scripts do `pnpm`).
 - Ajuste `--success-condition` conforme a política desejada (`all|first|last`).
+
+### Exemplo em package.json (atalhos `<pm>:<cmd>`)
+
+Este exemplo usa a sintaxe de atalho para encadear scripts de diferentes package managers:
+
+```json
+{
+  "scripts": {
+    "dev": "taskly npm:start pnpm:build yarn:test bun:dev",
+    "start": "node -e \"console.log('Start ready'); setInterval(()=>{}, 10000)\"",
+    "build": "node -e \"console.log('Build ok')\"",
+    "test": "node -e \"console.log('Tests ok')\""
+  }
+}
+```
+
+- `taskly npm:start` expande para `npm run start`.
+- `taskly pnpm:build` expande para `pnpm run build`.
+- `taskly yarn:test` expande para `yarn run test`.
+- `taskly bun:dev` expande para `bun run dev`.
+
+### Encaminhamento de argumentos (`--`) em package.json
+
+Você pode encaminhar flags para os scripts dos package managers usando `--`. Em `package.json`, envolva o comando em aspas e escape conforme necessário:
+
+```json
+{
+  "scripts": {
+    "dev:npm": "taskly \"npm:start -- --watch\"",
+    "dev:pnpm": "taskly \"pnpm:build -- --filter @app/web\"",
+    "dev:yarn": "taskly \"yarn:test -- --watch\"",
+    "dev:bun": "taskly \"bun:dev -- --hot\""
+  }
+}
+```
+
+- `npm:start -- --watch` encaminha `--watch` para o script `start` do npm.
+- `pnpm:build -- --filter @app/web` aplica `--filter` ao script `build` do pnpm.
+- `yarn:test -- --watch` encaminha `--watch` para o script `test` do yarn.
+- `bun:dev -- --hot` passa `--hot` para o script `dev` do bun.
+
+Também funciona com múltiplos processos:
+
+```json
+{
+  "scripts": {
+    "dev": "taskly \"npm:start -- --watch\" \"pnpm:build -- --filter @app/web\""
+  }
+}
+```
+
+### Escaping em JSON (aspas e barras)
+
+Em `package.json`, lembre-se de escapar aspas (`\"`) e barras invertidas (`\\`) dentro dos comandos:
+
+```json
+{
+  "scripts": {
+    "dev": "taskly \"npm:start -- --watch\" \"pnpm:build -- --filter @app/web\"",
+    "dev:multi": "taskly \"npm:start -- --watch\" \"yarn:test -- --watch\" \"bun:dev -- --hot\""
+  }
+}
+```
+
+- `\"...\"` mantém o token `<pm>:<cmd>` e seus argumentos íntegros.
+- Use `--` para separar argumentos do script (pós `run`) dos argumentos do próprio package manager.
+- Se precisar incluir barras ou aspas dentro de argumentos, duplique barras (`\\`) e escape aspas (`\"`).
 
 ## API
 
@@ -66,6 +165,21 @@ const result = await runConcurrently(
 );
 
 console.log(result.success);
+```
+
+### Atalho `<pm>:<cmd>` na API
+
+Você pode usar o mesmo atalho via API, sem precisar escrever `run` manualmente:
+
+```ts
+import { runConcurrently } from "@codemastersolutions/taskly";
+
+await runConcurrently([
+  "npm:start", // expande para "npm run start"
+  "pnpm:build", // expande para "pnpm run build"
+  "yarn:test", // expande para "yarn run test"
+  "bun:dev", // expande para "bun run dev"
+]);
 ```
 
 ## Build e artefatos

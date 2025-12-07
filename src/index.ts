@@ -39,13 +39,36 @@ interface InternalCmd {
   };
 }
 
+function expandPackageManagerShortcut(input: string): string {
+  const m = /^(npm|pnpm|yarn|bun):(.+)$/.exec(input);
+  if (!m) return input;
+  const pm = m[1];
+  const script = m[2];
+  // Normalize whitespace in script
+  const s = script.trim();
+  switch (pm) {
+    case "npm":
+      return `npm run ${s}`;
+    case "pnpm":
+      return `pnpm run ${s}`;
+    case "yarn":
+      // Use 'yarn run' for cross-version compatibility
+      return `yarn run ${s}`;
+    case "bun":
+      return `bun run ${s}`;
+    default:
+      return input;
+  }
+}
+
 function toInternal(index: number, cmd: Command): InternalCmd {
   if (typeof cmd === "string") {
-    const parsed = splitCommand(cmd);
+    const expanded = expandPackageManagerShortcut(cmd);
+    const parsed = splitCommand(expanded);
     return {
       index,
       config: {
-        command: cmd,
+        command: expanded,
         parsed,
         shell: false,
         restartTries: 0,
@@ -53,11 +76,13 @@ function toInternal(index: number, cmd: Command): InternalCmd {
       },
     } as InternalCmd;
   }
-  const parsed = splitCommand(cmd.command);
+  const expanded = expandPackageManagerShortcut(cmd.command);
+  const parsed = splitCommand(expanded);
   return {
     index,
     config: {
       ...cmd,
+      command: expanded,
       parsed,
       restartTries: cmd.restartTries ?? 0,
       restartDelay: cmd.restartDelay ?? 0,
