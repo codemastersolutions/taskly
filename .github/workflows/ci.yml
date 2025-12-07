@@ -36,8 +36,13 @@ jobs:
       - name: Build (prod)
         run: pnpm build:prod
 
-      - name: Test with coverage
-        run: pnpm test
+      - name: Test (Node 18, no coverage)
+        if: ${{ matrix.node-version == '18.x' }}
+        run: pnpm exec vitest --run
+
+      - name: Test with coverage (Node >= 20)
+        if: ${{ matrix.node-version != '18.x' }}
+        run: pnpm -s test
 
       - name: Audit (prod)
         run: pnpm audit --prod --registry=https://registry.npmjs.org/
