@@ -295,7 +295,7 @@ export async function runConcurrently(
     }
     queue = filtered;
   }
-  const parallelism = Math.max(1, options.maxProcesses ?? commands.length);
+  const parallelism = Math.max(1, options.maxProcesses ?? expandedList.length);
   const killOn = new Set(options.killOthersOn ?? []);
   const results: Array<{ name?: string; exitCode: number; index: number }> = [];
   let running = new Map<number, ReturnType<typeof spawn>>();
