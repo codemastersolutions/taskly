@@ -18,6 +18,7 @@ interface CLIOptions {
   shell?: boolean | string;
   cwd?: string;
   ignoreMissing?: boolean;
+  wildcardSort?: "alpha" | "package";
 }
 
 function parseCLI(argv: string[]): { opts: CLIOptions; commands: string[] } {
@@ -63,6 +64,18 @@ function parseCLI(argv: string[]): { opts: CLIOptions; commands: string[] } {
       opts.cwd = argv[++i];
     } else if (a === "--ignore-missing") {
       opts.ignoreMissing = true;
+    } else if (a === "--wildcard-sort") {
+      const v = (argv[++i] ?? "").toLowerCase();
+      if (v === "alpha" || v === "package") {
+        opts.wildcardSort = v as any;
+      } else {
+        console.error(`Invalid value for --wildcard-sort: ${v}`);
+        printHelp();
+        process.exit(1);
+      }
+    } else if (a === "--no-wildcard-sort") {
+      // Disable default alpha sort, preserve package.json order
+      opts.wildcardSort = "package";
     } else if (a === "--help" || a === "-h") {
       printHelp();
       process.exit(0);
@@ -80,7 +93,7 @@ function parseCLI(argv: string[]): { opts: CLIOptions; commands: string[] } {
 
 function printHelp() {
   console.log(
-    `taskly - concurrent command runner (zero-deps)\n\nUsage:\n  taskly [options] "cmd1 arg" "cmd2 arg" ...\n\nOptions:\n  --names name1,name2     Optional names for processes (by index)\n  --max-processes N       Limit parallel processes\n  --kill-others-on x,y    Kill others on success/failure\n  --prefix type|template  index|pid|time|command|name|none or template with {placeholders}\n  --prefix-colors c1,c2   Prefix colors per index (e.g., blue,magenta,auto)\n  --timestamp-format fmt  Timestamp format for {time} (default: yyyy-MM-dd HH:mm:ss.SSS)\n  --success-condition s   all|first|last (default: all)\n  --raw                   Disable prefixing and coloring\n  --shell [name]          Run via shell: cmd|powershell|pwsh|bash|sh (default: system)\n  --cwd PATH              Working directory\n+  --ignore-missing       Skip commands not found or scripts missing in package.json\n  -h, --help              Show help\n`
+    `taskly - concurrent command runner (zero-deps)\n\nUsage:\n  taskly [options] "cmd1 arg" "cmd2 arg" ...\n\nOptions:\n  --names name1,name2     Optional names for processes (by index)\n  --max-processes N       Limit parallel processes\n  --kill-others-on x,y    Kill others on success/failure\n  --prefix type|template  index|pid|time|command|name|none or template with {placeholders}\n  --prefix-colors c1,c2   Prefix colors per index (e.g., blue,magenta,auto)\n  --timestamp-format fmt  Timestamp format for {time} (default: yyyy-MM-dd HH:mm:ss.SSS)\n  --success-condition s   all|first|last (default: all)\n  --raw                   Disable prefixing and coloring\n  --shell [name]          Run via shell: cmd|powershell|pwsh|bash|sh (default: system)\n  --cwd PATH              Working directory\n  --ignore-missing        Skip commands not found or scripts missing in package.json\n  --wildcard-sort m       alpha|package (default: alpha). 'package' preserves package.json order\n  --no-wildcard-sort      Alias for '--wildcard-sort package'\n  -h, --help              Show help\n`
   );
 }
 
@@ -104,6 +117,8 @@ export async function cliEntry(argv = process.argv): Promise<number> {
     raw: opts.raw,
     cwd: opts.cwd,
     ignoreMissing: opts.ignoreMissing,
+    wildcardSort: opts.wildcardSort,
+    names: opts.names,
     prefixColors:
       opts.prefixColors && opts.prefixColors.length > 0
         ? opts.prefixColors

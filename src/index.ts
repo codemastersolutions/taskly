@@ -28,6 +28,8 @@ export interface RunOptions {
   timestampFormat?: string;
   raw?: boolean; // force raw mode for all commands
   ignoreMissing?: boolean; // skip commands that are not resolvable or scripts that don't exist
+  names?: string[]; // optional names to assign after wildcard expansion
+  wildcardSort?: "alpha" | "package"; // default: alpha (alphabetical); package preserves package.json order
 }
 
 export interface RunResult {
@@ -167,7 +169,11 @@ function getPackageJsonScripts(cwd: string): Record<string, string> | null {
   }
 }
 
-function expandWildcardsForCommand(cmd: Command, globalCwd: string): Command[] {
+function expandWildcardsForCommand(
+  cmd: Command,
+  globalCwd: string,
+  sortMode: "alpha" | "package"
+): Command[] {
   const baseObj: Exclude<Command, string> | undefined =
     typeof cmd === "string" ? undefined : (cmd as Exclude<Command, string>);
 
@@ -181,9 +187,10 @@ function expandWildcardsForCommand(cmd: Command, globalCwd: string): Command[] {
   if (!pattern.includes("*")) return [cmd];
   const scripts = getPackageJsonScripts(cwd) ?? {};
   const re = wildcardToRegex(pattern);
-  const matches = Object.keys(scripts)
-    .filter((k) => re.test(k))
-    .sort();
+  let matches = Object.keys(scripts).filter((k) => re.test(k));
+  if (sortMode === "alpha") {
+    matches = matches.slice().sort();
+  } // else preserve package.json insertion order
   if (matches.length === 0) return [cmd];
   return matches.map((scriptName) => {
     const composedName = baseObj?.name
@@ -247,10 +254,21 @@ export async function runConcurrently(
   const globalCwd = options.cwd ?? process.cwd();
   const expandedList: Command[] = [];
   for (const c of commands) {
-    const items = expandWildcardsForCommand(c, globalCwd);
+    const items = expandWildcardsForCommand(
+      c,
+      globalCwd,
+      options.wildcardSort ?? "alpha"
+    );
     for (const it of items) expandedList.push(it);
   }
   let queue = expandedList.map((c, i) => toInternal(i, c));
+  // Apply global names mapping after expansion when provided
+  if (options.names && options.names.length > 0) {
+    for (let i = 0; i < queue.length; i++) {
+      const nm = options.names[i];
+      if (nm && nm.length > 0) queue[i].config.name = nm;
+    }
+  }
   // Pre-validation and optional skipping of missing commands
   if (options.ignoreMissing) {
     const filtered: InternalCmd[] = [];

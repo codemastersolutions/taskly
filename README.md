@@ -55,6 +55,8 @@ Opções:
 - `--shell [name]` Executa via shell: `cmd|powershell|pwsh|bash|sh` (padrão: shell do sistema).
 - `--cwd PATH` Diretório de trabalho.
 - `--ignore-missing` Ignora comandos não encontrados ou scripts ausentes no `package.json`.
+- `--wildcard-sort m` Controla a ordem dos scripts expandidos: `alpha|package` (padrão: `alpha`). `package` preserva a ordem do `package.json`.
+- `--no-wildcard-sort` Atalho para `--wildcard-sort package`.
 
 ### Atalho de Package Manager (`<pm>:<cmd>`)
 
@@ -101,17 +103,44 @@ Regras:
   - Com `--ignore-missing`: o comando é ignorado e uma mensagem é emitida em `stderr`.
 - Nome dos processos: cada expansão recebe como `name` o nome do script (ex.: `start1`, `start2`, `start:watch`). Se você fornecer um `name` base via API, ele será prefixado (ex.: `svc:start1`).
 - Prefixos: ao usar `prefix=name` (padrão), os logs mostrarão `[start1]`, `[start2]` etc. Se houver `name` base, será `[svc:start1]`...
- - Paralelismo: por padrão, o número de processos paralelos é igual à quantidade de comandos após expansão do wildcard. Ajuste com `--max-processes` (CLI) ou `maxProcesses` (API) se quiser limitar.
+- Paralelismo: por padrão, o número de processos paralelos é igual à quantidade de comandos após expansão do wildcard. Ajuste com `--max-processes` (CLI) ou `maxProcesses` (API) se quiser limitar.
+
+Ordenação dos comandos e nomes (wildcard):
+
+- Padrão: os scripts expandidos por wildcard são ordenados alfabeticamente; os nomes (`--names`) são aplicados nessa ordem.
+- Desativar ordenação: use `--wildcard-sort package` ou `--no-wildcard-sort` para preservar a ordem definida no `package.json`. Ao desativar, a ordem dos comandos e o mapeamento de nomes seguem o índice original.
+
+Exemplos de ordenação:
+
+```bash
+# Ordem alfabética (padrão): admin, app, customer
+taskly --names app,admin,customer "npm:start-watch:*"
+
+# Preservar ordem do package.json
+taskly --no-wildcard-sort --names app,admin,customer "npm:start-watch:*"
+```
+
+Integração com `--names`:
+
+- Quando você fornece `--names a,b,c` e usa um wildcard, os nomes são aplicados após a expansão, seguindo a ordem dos scripts correspondentes.
+- Exemplo: `taskly --names app,admin,customer "npm:start-watch:*"` gera nomes `app`, `admin`, `customer` para cada script expandido, nessa ordem.
+- Na API, use `names: ["app","admin","customer"]` em `RunOptions` para o mesmo efeito.
 
 Exemplos de nomes em API:
 
 ```ts
 import { runConcurrently } from "taskly";
 
-await runConcurrently([
-  "pnpm:start*", // nomes: start1, start2, start:watch
-  { command: "pnpm:test*", name: "qa" }, // nomes: qa:test1, qa:test:watch...
-]);
+await runConcurrently(
+  [
+    "pnpm:start*", // nomes: start1, start2, start:watch
+    { command: "pnpm:test*", name: "qa" }, // nomes: qa:test1, qa:test:watch...
+  ],
+  {
+    wildcardSort: "alpha", // ou "package" para preservar ordem do package.json
+    names: ["app", "admin", "customer"],
+  }
+);
 ```
 
 ### Validação e ignorar comandos inexistentes
