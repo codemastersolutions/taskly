@@ -101,6 +101,7 @@ Regras:
   - Com `--ignore-missing`: o comando é ignorado e uma mensagem é emitida em `stderr`.
 - Nome dos processos: cada expansão recebe como `name` o nome do script (ex.: `start1`, `start2`, `start:watch`). Se você fornecer um `name` base via API, ele será prefixado (ex.: `svc:start1`).
 - Prefixos: ao usar `prefix=name` (padrão), os logs mostrarão `[start1]`, `[start2]` etc. Se houver `name` base, será `[svc:start1]`...
+ - Paralelismo: por padrão, o número de processos paralelos é igual à quantidade de comandos após expansão do wildcard. Ajuste com `--max-processes` (CLI) ou `maxProcesses` (API) se quiser limitar.
 
 Exemplos de nomes em API:
 
