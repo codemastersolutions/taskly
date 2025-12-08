@@ -93,6 +93,16 @@ function toInternal(index: number, cmd: Command): InternalCmd {
   };
 }
 
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function wildcardToRegex(pattern: string): RegExp {
+  // Only '*' is supported as wildcard; others are treated literally
+  const re = "^" + pattern.split("*").map(escapeRegex).join(".*") + "$";
+  return new RegExp(re);
+}
+
 function detectPmRun(parsed: {
   cmd: string;
   args: string[];
@@ -157,6 +167,36 @@ function getPackageJsonScripts(cwd: string): Record<string, string> | null {
   }
 }
 
+function expandWildcardsForCommand(cmd: Command, globalCwd: string): Command[] {
+  const baseObj: Exclude<Command, string> | undefined =
+    typeof cmd === "string" ? undefined : (cmd as Exclude<Command, string>);
+
+  const raw = typeof cmd === "string" ? cmd : cmd.command;
+  const expanded = expandPackageManagerShortcut(raw);
+  const cwd = typeof cmd === "string" ? globalCwd : cmd.cwd ?? globalCwd;
+  const parsed = splitCommand(expanded);
+  const pmRun = detectPmRun(parsed);
+  if (!pmRun) return [cmd];
+  const pattern = pmRun.script;
+  if (!pattern.includes("*")) return [cmd];
+  const scripts = getPackageJsonScripts(cwd) ?? {};
+  const re = wildcardToRegex(pattern);
+  const matches = Object.keys(scripts)
+    .filter((k) => re.test(k))
+    .sort();
+  if (matches.length === 0) return [cmd];
+  return matches.map((scriptName) => {
+    const composedName = baseObj?.name
+      ? `${baseObj.name}:${scriptName}`
+      : scriptName;
+    return {
+      ...(baseObj ?? {}),
+      command: `${pmRun.pm} run ${scriptName}`,
+      name: composedName,
+    } as Exclude<Command, string>;
+  });
+}
+
 function makePrefix(
   t: PrefixType | string,
   idx: number,
@@ -203,7 +243,14 @@ export async function runConcurrently(
   commands: Command[],
   options: RunOptions = {}
 ): Promise<RunResult> {
-  let queue = commands.map((c, i) => toInternal(i, c));
+  // Expand wildcard commands like "pnpm:start*" -> multiple concrete scripts from package.json
+  const globalCwd = options.cwd ?? process.cwd();
+  const expandedList: Command[] = [];
+  for (const c of commands) {
+    const items = expandWildcardsForCommand(c, globalCwd);
+    for (const it of items) expandedList.push(it);
+  }
+  let queue = expandedList.map((c, i) => toInternal(i, c));
   // Pre-validation and optional skipping of missing commands
   if (options.ignoreMissing) {
     const filtered: InternalCmd[] = [];
