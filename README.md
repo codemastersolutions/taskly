@@ -30,6 +30,9 @@ taskly --shell "pnpm dev:api" "pnpm dev:web"
 
 # Encaminhar argumentos para scripts com '--'
 taskly "npm:start -- --watch" "pnpm:build -- --filter @app/web"
+
+# Ignorar comandos inexistentes
+taskly --ignore-missing "npm:does-not-exist" "nonexistent-cmd" "pnpm:build"
 ```
 
 ## Uso via CLI
@@ -51,6 +54,7 @@ Opções:
 - `--shell` Usa o shell do sistema (menos seguro).
 - `--shell [name]` Executa via shell: `cmd|powershell|pwsh|bash|sh` (padrão: shell do sistema).
 - `--cwd PATH` Diretório de trabalho.
+- `--ignore-missing` Ignora comandos não encontrados ou scripts ausentes no `package.json`.
 
 ### Atalho de Package Manager (`<pm>:<cmd>`)
 
@@ -74,6 +78,54 @@ Notas:
 - Compatível com os principais package managers: `npm`, `pnpm`, `yarn`, `bun`.
 - Para o Yarn usamos `yarn run` por compatibilidade entre versões.
 - Use aspas para preservar espaços e `--` para encaminhar argumentos ao script do package manager.
+
+### Comandos wildcard (`*`)
+
+Você pode usar `*` para executar múltiplos scripts do `package.json` que combinem com o padrão:
+
+```bash
+# Executa todos os scripts que começam com "start"
+taskly pnpm:start*
+# Ex.: se houverem scripts: start1, start2, start:watch -> todos serão executados
+
+# Também funciona com outros PMs
+taskly npm:test* yarn:build* bun:dev*
+```
+
+Regras:
+
+- O wildcard é avaliado contra as chaves de `scripts` do `package.json` no `cwd` (ou por comando, se você definiu `cwd` por comando via API).
+- `*` corresponde a qualquer sequência (incluindo vazia). Padrões com múltiplos `*` são suportados.
+- Quando não há correspondências:
+  - Sem `--ignore-missing`: o comando original é mantido (ex.: `pnpm run dev*`).
+  - Com `--ignore-missing`: o comando é ignorado e uma mensagem é emitida em `stderr`.
+- Nome dos processos: cada expansão recebe como `name` o nome do script (ex.: `start1`, `start2`, `start:watch`). Se você fornecer um `name` base via API, ele será prefixado (ex.: `svc:start1`).
+- Prefixos: ao usar `prefix=name` (padrão), os logs mostrarão `[start1]`, `[start2]` etc. Se houver `name` base, será `[svc:start1]`...
+
+Exemplos de nomes em API:
+
+```ts
+import { runConcurrently } from "taskly";
+
+await runConcurrently([
+  "pnpm:start*", // nomes: start1, start2, start:watch
+  { command: "pnpm:test*", name: "qa" }, // nomes: qa:test1, qa:test:watch...
+]);
+```
+
+### Validação e ignorar comandos inexistentes
+
+- Com `--ignore-missing`, o Taskly valida antes de executar:
+  - Se o executável do comando está disponível no `PATH` (ex.: `pnpm`, `node`, `echo`).
+  - Se o script existe no `package.json` quando usar atalhos ou `run` (`npm run <script>`, `pnpm run <script>`, `yarn run <script>`, `bun run <script>`).
+- Comandos inválidos são ignorados e não geram erro; uma mensagem é impressa em `stderr` indicando o motivo.
+
+Exemplos:
+
+```bash
+# Ignora script inexistente e binário inexistente, executa somente o válido
+taskly --ignore-missing "npm:does-not-exist" "nonexistent-cmd" "pnpm:build"
+```
 
 #### Tabela rápida de mapeamentos
 
@@ -185,6 +237,7 @@ const result = await runConcurrently(
     killOthersOn: ["failure"],
     prefix: "name",
     successCondition: "all",
+    ignoreMissing: true,
   }
 );
 
@@ -454,6 +507,7 @@ export interface RunOptions {
   successCondition?: "all" | "first" | "last";
   timestampFormat?: string; // default: "yyyy-MM-dd HH:mm:ss.SSS"
   raw?: boolean; // força modo cru para todos
+  ignoreMissing?: boolean; // ignora comandos não resolvidos e scripts ausentes
 }
 
 export interface RunResult {

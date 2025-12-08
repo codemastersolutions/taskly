@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { PrefixType, splitCommand } from "./utils/args.js";
 import { colorize, timestamp } from "./utils/format.js";
 
@@ -25,6 +27,7 @@ export interface RunOptions {
   successCondition?: "all" | "first" | "last";
   timestampFormat?: string;
   raw?: boolean; // force raw mode for all commands
+  ignoreMissing?: boolean; // skip commands that are not resolvable or scripts that don't exist
 }
 
 export interface RunResult {
@@ -90,6 +93,110 @@ function toInternal(index: number, cmd: Command): InternalCmd {
   };
 }
 
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function wildcardToRegex(pattern: string): RegExp {
+  // Only '*' is supported as wildcard; others are treated literally
+  const re = "^" + pattern.split("*").map(escapeRegex).join(".*") + "$";
+  return new RegExp(re);
+}
+
+function detectPmRun(parsed: {
+  cmd: string;
+  args: string[];
+}): { pm: string; script: string } | null {
+  const pm = parsed.cmd;
+  if (!["npm", "pnpm", "yarn", "bun"].includes(pm)) return null;
+  if (parsed.args[0] === "run" && parsed.args[1]) {
+    return { pm, script: parsed.args[1] };
+  }
+  return null;
+}
+
+function fileExistsExecutable(p: string): boolean {
+  try {
+    const stat = fs.statSync(p);
+    // Consider files (and symlinks) as executable enough for spawn purposes
+    return stat.isFile() || stat.isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+function resolveOnPath(cmd: string, env: NodeJS.ProcessEnv): string | null {
+  const isWin = process.platform === "win32";
+  const pathVar = env.PATH || env.Path || env.path || "";
+  const pathext = isWin ? env.PATHEXT || ".EXE;.CMD;.BAT;.COM" : "";
+  const exts = isWin ? pathext.split(";").filter(Boolean) : [""];
+  for (const dir of pathVar.split(path.delimiter)) {
+    if (!dir) continue;
+    for (const ext of exts) {
+      const candidate = path.join(dir, ext ? `${cmd}${ext}` : cmd);
+      if (fileExistsExecutable(candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
+function isExecutableAvailable(
+  cmd: string,
+  env: NodeJS.ProcessEnv,
+  cwd: string
+): boolean {
+  // If command contains a path separator, treat as path (absolute or relative)
+  if (cmd.includes(path.sep) || cmd.startsWith("./") || cmd.startsWith("../")) {
+    const target = path.isAbsolute(cmd) ? cmd : path.resolve(cwd, cmd);
+    return fileExistsExecutable(target);
+  }
+  // Otherwise resolve on PATH
+  return resolveOnPath(cmd, env) !== null;
+}
+
+function getPackageJsonScripts(cwd: string): Record<string, string> | null {
+  const pkgPath = path.join(cwd, "package.json");
+  try {
+    const raw = fs.readFileSync(pkgPath, "utf8");
+    const json = JSON.parse(raw);
+    if (json && typeof json.scripts === "object" && json.scripts)
+      return json.scripts as Record<string, string>;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function expandWildcardsForCommand(cmd: Command, globalCwd: string): Command[] {
+  const baseObj: Exclude<Command, string> | undefined =
+    typeof cmd === "string" ? undefined : (cmd as Exclude<Command, string>);
+
+  const raw = typeof cmd === "string" ? cmd : cmd.command;
+  const expanded = expandPackageManagerShortcut(raw);
+  const cwd = typeof cmd === "string" ? globalCwd : cmd.cwd ?? globalCwd;
+  const parsed = splitCommand(expanded);
+  const pmRun = detectPmRun(parsed);
+  if (!pmRun) return [cmd];
+  const pattern = pmRun.script;
+  if (!pattern.includes("*")) return [cmd];
+  const scripts = getPackageJsonScripts(cwd) ?? {};
+  const re = wildcardToRegex(pattern);
+  const matches = Object.keys(scripts)
+    .filter((k) => re.test(k))
+    .sort();
+  if (matches.length === 0) return [cmd];
+  return matches.map((scriptName) => {
+    const composedName = baseObj?.name
+      ? `${baseObj.name}:${scriptName}`
+      : scriptName;
+    return {
+      ...(baseObj ?? {}),
+      command: `${pmRun.pm} run ${scriptName}`,
+      name: composedName,
+    } as Exclude<Command, string>;
+  });
+}
+
 function makePrefix(
   t: PrefixType | string,
   idx: number,
@@ -136,7 +243,58 @@ export async function runConcurrently(
   commands: Command[],
   options: RunOptions = {}
 ): Promise<RunResult> {
-  const queue = commands.map((c, i) => toInternal(i, c));
+  // Expand wildcard commands like "pnpm:start*" -> multiple concrete scripts from package.json
+  const globalCwd = options.cwd ?? process.cwd();
+  const expandedList: Command[] = [];
+  for (const c of commands) {
+    const items = expandWildcardsForCommand(c, globalCwd);
+    for (const it of items) expandedList.push(it);
+  }
+  let queue = expandedList.map((c, i) => toInternal(i, c));
+  // Pre-validation and optional skipping of missing commands
+  if (options.ignoreMissing) {
+    const filtered: InternalCmd[] = [];
+    for (const item of queue) {
+      const env = { ...process.env, ...(item.config.env ?? {}) };
+      const cwd = item.config.cwd ?? options.cwd ?? process.cwd();
+      let ok = true;
+      let reason = "";
+      // Validate executable when not using shell
+      if (!item.config.shell) {
+        const available = isExecutableAvailable(
+          item.config.parsed.cmd,
+          env,
+          cwd
+        );
+        if (!available) {
+          ok = false;
+          reason = `executável não encontrado: ${item.config.parsed.cmd}`;
+        }
+      }
+      // Validate package manager script existence if applicable
+      if (ok) {
+        const pmRun = detectPmRun(item.config.parsed);
+        if (pmRun) {
+          const scripts = getPackageJsonScripts(cwd);
+          const exists = Boolean(scripts && scripts[pmRun.script]);
+          if (!exists) {
+            ok = false;
+            reason = `script não encontrado em package.json: ${pmRun.script}`;
+          }
+        }
+      }
+      if (!ok) {
+        const msg = `[skip] Ignorado (#${item.index}${
+          item.config.name ? ` ${item.config.name}` : ""
+        }): ${item.config.command} — ${reason}`;
+        // Warn to stderr once; keep output simple to avoid coloring in raw contexts
+        process.stderr.write(`${msg}\n`);
+        continue;
+      }
+      filtered.push(item);
+    }
+    queue = filtered;
+  }
   const parallelism = Math.max(1, options.maxProcesses ?? commands.length);
   const killOn = new Set(options.killOthersOn ?? []);
   const results: Array<{ name?: string; exitCode: number; index: number }> = [];
