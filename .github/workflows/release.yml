@@ -1,69 +1,81 @@
-name: Release
+name: Release & Publish
 
 on:
-  workflow_dispatch:
-    inputs:
-      increment:
-        description: "Increment version"
-        required: true
-        default: "patch"
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
+  pull_request:
+    branches: [main]
+    types: [closed]
 
 jobs:
-  release:
+  publish:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      id-token: write
-
+      packages: write
+      id-token: write # Required for provenance / trusted publishing
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 10
+      - name: Enable Corepack
+        run: corepack enable
 
-      - name: Setup Node.js
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js 24.x
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24.x
+          registry-url: "https://registry.npmjs.org"
           cache: "pnpm"
 
-      - name: Configure Git User
+      - name: Check if version is new
+        id: check
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          if git rev-parse "v$PACKAGE_VERSION" >/dev/null 2>&1; then
+            echo "Version v$PACKAGE_VERSION already exists. Skipping release."
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          else
+            echo "Version v$PACKAGE_VERSION is new. Proceeding with release."
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "version=$PACKAGE_VERSION" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Install Dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
 
-      - name: Build Project
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm -s test
+
+      - name: Build (prod)
         run: pnpm build:prod
 
-      - name: Bump Version
-        run: |
-          npm version ${{ inputs.increment }} --git-tag-version=false
-          VERSION=$(node -p "require('./package.json').version")
-          echo "NEW_VERSION=$VERSION" >> $GITHUB_ENV
-          git commit -am "chore: release v$VERSION"
-          git tag v$VERSION
-          git push origin HEAD --tags
+      - name: Publish to npm
+        if: steps.check.outputs.should_release == 'true'
+        run: pnpm publish --access public --no-git-checks --provenance
 
-      - name: Create Release
+      - name: Create Git Tag
+        if: steps.check.outputs.should_release == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "v${{ steps.check.outputs.version }}"
+          git push origin "v${{ steps.check.outputs.version }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        if: steps.check.outputs.should_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.NEW_VERSION }}
-          name: Release v${{ env.NEW_VERSION }}
+          tag_name: v${{ steps.check.outputs.version }}
           generate_release_notes: true
-          prerelease: false
-
-      - name: Publish to NPM
-        run: pnpm publish --no-git-checks --provenance --access public
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} --provenance
