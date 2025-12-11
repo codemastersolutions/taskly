@@ -1,6 +1,6 @@
 {
   "name": "@codemastersolutions/taskly",
-  "version": "0.0.14",
+  "version": "0.1.0",
   "description": "Zero-deps concurrent command runner and CLI (npm/yarn/pnpm/bun/shell/powershell/cmd/bat)",
   "type": "module",
   "license": "MIT",
