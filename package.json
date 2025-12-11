@@ -1,6 +1,6 @@
 {
   "name": "@codemastersolutions/taskly",
-  "version": "0.1.0",
+  "version": "0.0.7",
   "description": "Zero-deps concurrent command runner and CLI (npm/yarn/pnpm/bun/shell/powershell/cmd/bat)",
   "type": "module",
   "license": "MIT",
@@ -44,11 +44,12 @@
     "build:prod": "pnpm clean && tsc -p tsconfig.prod.json && node scripts/minify.mjs",
     "lint": "eslint . --ext .ts",
     "test": "vitest --coverage --run",
+    "test:ci": "vitest --run",
     "commitzero": "commitzero",
     "commitzero:install": "pnpm exec commitzero install-hooks",
     "commitzero:uninstall": "pnpm exec commitzero uninstall-hooks",
-    "commit": "npm run commitzero commit -a",
-    "commit:push": "npm run commitzero -- commit --add --push"
+    "commit": "pnpm exec commitzero commit -a",
+    "commit:push": "pnpm exec commitzero commit -a -p"
   },
   "devDependencies": {
     "@codemastersolutions/commitzero": "^0.0.41",

@@ -2,47 +2,40 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - dev
 
 jobs:
-  build-test-lint:
+  validate:
+    name: Validate on ${{ matrix.os }} with Node.js ${{ matrix.node-version }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        node-version: [18.x, 20.x, 24.x]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: [18, 20, 22, 24]
+
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Enable Corepack
-        run: corepack enable
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js ${{ matrix.node-version }}
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: "pnpm"
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
-      - name: Lint
+      - name: Run Lint
         run: pnpm lint
 
-      - name: Build (prod)
-        run: pnpm build:prod
-
-      - name: Test (Node 18, no coverage)
-        if: ${{ matrix.node-version == '18.x' }}
-        run: pnpm exec vitest --run
-
-      - name: Test with coverage (Node >= 20)
-        if: ${{ matrix.node-version != '18.x' }}
-        run: pnpm -s test
-
-      - name: Audit (prod)
-        run: pnpm audit --prod --registry=https://registry.npmjs.org/
+      - name: Run Tests
+        run: pnpm test:ci
