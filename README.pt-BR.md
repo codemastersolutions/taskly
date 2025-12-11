@@ -8,6 +8,9 @@ Executor concorrente de comandos e CLI sem dependências, compatível com Node >
 
 ```bash
 pnpm add @codemastersolutions/taskly -D
+npm install @codemastersolutions/taskly -D
+yarn add @codemastersolutions/taskly -D
+bun add @codemastersolutions/taskly -D
 ```
 
 ## Exemplos rápidos

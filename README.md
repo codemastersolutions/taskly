@@ -8,6 +8,9 @@ Concurrent command runner and zero-deps CLI for Node >= 16, written in TypeScrip
 
 ```bash
 pnpm add @codemastersolutions/taskly -D
+npm install @codemastersolutions/taskly -D
+yarn add @codemastersolutions/taskly -D
+bun add @codemastersolutions/taskly -D
 ```
 
 ## Quick Examples

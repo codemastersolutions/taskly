@@ -8,6 +8,9 @@ Runner concurrente de comandos y CLI sin dependencias para Node >= 16, escrito e
 
 ```bash
 pnpm add @codemastersolutions/taskly -D
+npm install @codemastersolutions/taskly -D
+yarn add @codemastersolutions/taskly -D
+bun add @codemastersolutions/taskly -D
 ```
 
 ## Ejemplos rápidos
