@@ -23,6 +23,8 @@ permissions:
 jobs:
   bump:
     runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.bump_step.outputs.new_version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,11 +46,13 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Bump version and Create Release
+        id: bump_step
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           pnpm version ${{ inputs.type }} --no-git-tag-version
           NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "new_version=v$NEW_VERSION" >> $GITHUB_OUTPUT
 
           # Commit e Push
           git commit -am "chore(release): v$NEW_VERSION"
@@ -56,4 +60,14 @@ jobs:
 
           # Criação da Tag e Release
           echo "Creating release v$NEW_VERSION"
-          gh release create v$NEW_VERSION --title "Release v$NEW_VERSION" --generate-notes --target main
+          gh release create v$NEW_VERSION --title "v$NEW_VERSION" --generate-notes --target main
+
+  publish-release:
+    needs: bump
+    uses: ./.github/workflows/release.yml
+    with:
+      ref: ${{ needs.bump.outputs.new_version }}
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
