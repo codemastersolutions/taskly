@@ -37,8 +37,13 @@ jobs:
       - name: Run Lint
         run: pnpm lint
 
-      - name: Run Tests
+      - name: Run Tests CI (no coverage)
+        run: pnpm test:ci
+        if: ${{ matrix.node-version === 18 }}
+
+      - name: Run Tests (with coverage)
         run: pnpm test
+        if: ${{ matrix.node-version > 18 }}
 
   automerge:
     needs: validate
