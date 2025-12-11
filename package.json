@@ -47,8 +47,8 @@
     "commitzero": "commitzero",
     "commitzero:install": "pnpm exec commitzero install-hooks",
     "commitzero:uninstall": "pnpm exec commitzero uninstall-hooks",
-    "commit": "pnpm commitzero commit -a",
-    "commit:push": "pnpm commitzero -- commit --add --push"
+    "commit": "pnpm run commitzero commit -a",
+    "commit:push": "pnpm run commitzero commit --add --push"
   },
   "devDependencies": {
     "@codemastersolutions/commitzero": "^0.0.41",
