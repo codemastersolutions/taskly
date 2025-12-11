@@ -43,9 +43,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Bump version
+      - name: Bump version and Create Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           pnpm version ${{ inputs.type }} --no-git-tag-version
           NEW_VERSION=$(node -p "require('./package.json').version")
+
+          # Commit e Push
           git commit -am "chore(release): v$NEW_VERSION"
           git push
+
+          # Criação da Tag e Release
+          echo "Creating release v$NEW_VERSION"
+          gh release create v$NEW_VERSION --title "Release v$NEW_VERSION" --generate-notes --target main

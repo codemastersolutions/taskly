@@ -60,25 +60,3 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh pr merge ${{ github.event.pull_request.number }} --merge --auto --repo ${{ github.repository }}
-
-  release:
-    needs: validate
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Create Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          if gh release view v$VERSION >/dev/null 2>&1; then
-            echo "Release v$VERSION already exists"
-          else
-            echo "Creating release v$VERSION"
-            gh release create v$VERSION --title "Release v$VERSION" --generate-notes --target main
-          fi
