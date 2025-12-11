@@ -51,13 +51,17 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       packages: write
+      id-token: write # Required for provenance / trusted publishing
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Enable Corepack
+        run: corepack enable
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -69,21 +73,13 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           cache: "pnpm"
 
-      - name: Enable Corepack
-        run: corepack enable
-
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
       - name: Lint
         run: pnpm lint
 
-      - name: Test (Node 18, no coverage)
-        if: ${{ matrix.node-version == '18.x' }}
-        run: pnpm exec vitest --run
-
-      - name: Test with coverage (Node >= 20)
-        if: ${{ matrix.node-version != '18.x' }}
+      - name: Test
         run: pnpm -s test
 
       - name: Build (prod)
@@ -110,6 +106,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: pnpm publish --access public --no-git-checks
+        run: pnpm publish --access public --no-git-checks --provenance
