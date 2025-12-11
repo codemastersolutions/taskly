@@ -38,4 +38,16 @@ jobs:
         run: pnpm lint
 
       - name: Run Tests
-        run: pnpm test:ci
+        run: pnpm test
+
+  automerge:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
+      - name: Merge PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge ${{ github.event.pull_request.number }} --merge --auto
