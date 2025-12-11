@@ -19,6 +19,7 @@ interface CLIOptions {
   cwd?: string;
   ignoreMissing?: boolean;
   wildcardSort?: "alpha" | "package";
+  helpRequested?: boolean;
 }
 
 function parseCLI(argv: string[]): { opts: CLIOptions; commands: string[] } {
@@ -35,6 +36,13 @@ function parseCLI(argv: string[]): { opts: CLIOptions; commands: string[] } {
     } else if (a === "--prefix") {
       opts.prefix = parsePrefix(argv[++i]);
     } else if (a === "--prefix-colors") {
+      const v = argv[++i] ?? "";
+      opts.prefixColors = v
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+    } else if (a === "--prefixColor" || a === "--prefixColors") {
+      // Aliases for --prefix-colors
       const v = argv[++i] ?? "";
       opts.prefixColors = v
         .split(",")
@@ -77,6 +85,7 @@ function parseCLI(argv: string[]): { opts: CLIOptions; commands: string[] } {
       // Disable default alpha sort, preserve package.json order
       opts.wildcardSort = "package";
     } else if (a === "--help" || a === "-h") {
+      opts.helpRequested = true;
       printHelp();
       process.exit(0);
     } else if (a.startsWith("-")) {
@@ -93,12 +102,16 @@ function parseCLI(argv: string[]): { opts: CLIOptions; commands: string[] } {
 
 function printHelp() {
   console.log(
-    `taskly - concurrent command runner (zero-deps)\n\nUsage:\n  taskly [options] "cmd1 arg" "cmd2 arg" ...\n\nOptions:\n  --names name1,name2     Optional names for processes (by index)\n  --max-processes N       Limit parallel processes\n  --kill-others-on x,y    Kill others on success/failure\n  --prefix type|template  index|pid|time|command|name|none or template with {placeholders}\n  --prefix-colors c1,c2   Prefix colors per index (e.g., blue,magenta,auto)\n  --timestamp-format fmt  Timestamp format for {time} (default: yyyy-MM-dd HH:mm:ss.SSS)\n  --success-condition s   all|first|last (default: all)\n  --raw                   Disable prefixing and coloring\n  --shell [name]          Run via shell: cmd|powershell|pwsh|bash|sh (default: system)\n  --cwd PATH              Working directory\n  --ignore-missing        Skip commands not found or scripts missing in package.json\n  --wildcard-sort m       alpha|package (default: alpha). 'package' preserves package.json order\n  --no-wildcard-sort      Alias for '--wildcard-sort package'\n  -h, --help              Show help\n`
+    `taskly - concurrent command runner (zero-deps)\n\nUsage:\n  taskly [options] "cmd1 arg" "cmd2 arg" ...\n\nOptions:\n  --names name1,name2     Optional names for processes (by index)\n  --max-processes N       Limit parallel processes\n  --kill-others-on x,y    Kill others on success/failure\n  --prefix type|template  index|pid|time|command|name|none or template with {placeholders}\n   --prefix-colors c1,c2   Prefix colors per index (e.g., blue,magenta,auto)\n   Aliases: --prefixColor, --prefixColors\n   --timestamp-format fmt  Timestamp format for {time} (default: yyyy-MM-dd HH:mm:ss.SSS)\n   --success-condition s   all|first|last (default: all)\n   --raw                   Disable prefixing and coloring\n   --shell [name]          Run via shell: cmd|powershell|pwsh|bash|sh (default: system)\n   --cwd PATH              Working directory\n   --ignore-missing        Skip commands not found or scripts missing in package.json\n   --wildcard-sort m       alpha|package (default: alpha). 'package' preserves package.json order\n   --no-wildcard-sort      Alias for '--wildcard-sort package'\n   -h, --help              Show help\n`
   );
 }
 
 export async function cliEntry(argv = process.argv): Promise<number> {
   const { opts, commands } = parseCLI(argv);
+  if (opts.helpRequested) {
+    // Help already printed in parseCLI; return success code 0.
+    return 0;
+  }
   if (commands.length === 0) {
     printHelp();
     return 1;
